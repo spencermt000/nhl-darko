@@ -1,0 +1,1417 @@
+
+[00:32:26] ===== run_all.sh started =====
+[00:32:26] Step 1/3: rapm_v2.py (pooled + per-season with two-pass quality adjustment)...
+Identifying goalies...
+  227 goalie IDs to exclude
+Building position lookup...
+  2,997 skaters with position data
+Loading clean_pbp.csv...
+  1,333,234 5v5 events  seasons 2015–2024
+
+── pooled (1,333,234 events) ──────────────
+  1,999 skaters
+  Matrix: 1,333,234 × 4,003, 14,176,316 nnz
+    xGF: 763,609 events with y>0 | alpha=1000
+    GF: 44,017 events with y>0 | alpha=5000
+    SOG: 550,645 events with y>0 | alpha=1000
+    TO: 132,930 events with y>0 | alpha=1000
+    GA: 173,000 events with y>0 | alpha=500
+
+Top 15 (pooled) by BPR:
+       player_name position  BPR_O   BPR_D    BPR  BPR_se  xGF_net  GF_net  SOG_net  TO_net  GA_net
+     Brayden.Point        F 0.4057  0.4456 0.8513  0.2686   0.1670  0.1062  -0.3097 -0.9795  0.3092
+      Jeff.Skinner        F 0.4370  0.3676 0.8046  0.2782  -0.0358  0.0679   0.0578  0.3303 -1.1138
+      Adam.Boqvist        D 0.1524  0.6169 0.7693  0.3670  -0.1353 -0.0199  -1.4755 -0.3870  1.1499
+Vladislav.Gavrikov        D 0.4160  0.3299 0.7459  0.2899   0.0233 -0.0866   0.4636  0.1088  0.5262
+      Simon.Benoit        D 0.2461  0.4579 0.7039  0.3729  -0.0553 -0.1274  -0.5333 -0.4304  0.5469
+        Sam.Gagner        F 0.4009  0.2795 0.6804  0.3451  -0.0489 -0.1018   0.7309 -0.5761 -0.8704
+        Dean.Kukan        D 0.4428  0.1953 0.6381  0.4248   0.0571  0.0387   1.0633 -0.6589 -0.4683
+      Dylan.Cozens        F 0.2643  0.3472 0.6115  0.3469   0.0299 -0.0283  -0.2239 -0.4803  0.3875
+   Mathieu.Olivier        F 0.3337  0.2756 0.6093  0.4279   0.0513 -0.1460  -0.0875  0.9930 -0.3506
+    Barrett.Hayton        F 0.3263  0.2826 0.6089  0.3631   0.0054 -0.0981   0.0869  0.0367 -0.8577
+  Joel.Eriksson.Ek        F 0.6142 -0.0313 0.5830  0.3130   0.2690  0.2094   1.9693 -0.1660 -1.4069
+   Henri.Jokiharju        D 0.2876  0.2917 0.5793  0.3091  -0.0623 -0.0576   0.1329 -0.0269 -0.2002
+      Walker.Duehr        F 0.3749  0.2031 0.5779  0.5116   0.0142  0.0311   0.5992 -0.5851 -1.5812
+      Erik.Johnson        D 0.3838  0.1933 0.5771  0.2865   0.0207  0.1279   0.7081  0.0390 -0.0716
+     Alex.Ovechkin        F 0.1875  0.3876 0.5752  0.2653  -0.0918  0.1041  -0.4405 -0.5647  0.9744
+  Pass-1 quality lookup: 1,999 players
+
+── season 2015 (141,015 events) ──────────────
+  883 skaters
+  Matrix: 141,015 × 1,773, 1,779,216 nnz + 2 quality covars
+Traceback (most recent call last):
+  File "/Users/spencerthompson/Desktop/Projects/nhl-rapm/rapm_v2.py", line 416, in <module>
+    sout, _, _, _ = run_frame(
+                    ~~~~~~~~~^
+        sf, label=f"season {season}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        prior_coefs=season_prior,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^
+        pass1_quality=pass1_quality,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/spencerthompson/Desktop/Projects/nhl-rapm/rapm_v2.py", line 309, in run_frame
+    results, all_coefs = fit_rapm(frame, X, player_ids,
+                         ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+                                   prior_coefs=prior_coefs, sample_weight=sample_weight)
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/spencerthompson/Desktop/Projects/nhl-rapm/rapm_v2.py", line 247, in fit_rapm
+    y_fit = y - X.dot(mu) if mu is not None else y
+                ~~~~~^^^^
+  File "/Users/spencerthompson/Desktop/Projects/nhl-rapm/.venv/lib/python3.13/site-packages/scipy/sparse/_base.py", line 603, in dot
+    return self @ other
+           ~~~~~^~~~~~~
+  File "/Users/spencerthompson/Desktop/Projects/nhl-rapm/.venv/lib/python3.13/site-packages/scipy/sparse/_base.py", line 923, in __matmul__
+    return self._matmul_dispatch(other)
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/Users/spencerthompson/Desktop/Projects/nhl-rapm/.venv/lib/python3.13/site-packages/scipy/sparse/_base.py", line 845, in _matmul_dispatch
+    raise ValueError(
+        f"{err_prefix} (n,k={N}),(k={other.shape[0]},1?)->(n,1?)"
+    )
+ValueError: matmul: dimension mismatch with signature (n,k=1773),(k=1771,1?)->(n,1?)
+[01:26:41] rapm_v2.py done.
+[01:26:41] Step 2/3: box_score.py (MoneyPuck box scores → production ratings)...
+/Users/spencerthompson/Desktop/Projects/nhl-rapm/.venv/lib/python3.13/site-packages/sklearn/utils/validation.py:2684: UserWarning: X has feature names, but StandardScaler was fitted without feature names
+  warnings.warn(
+/Users/spencerthompson/Desktop/Projects/nhl-rapm/.venv/lib/python3.13/site-packages/sklearn/utils/validation.py:2684: UserWarning: X has feature names, but StandardScaler was fitted without feature names
+  warnings.warn(
+Loading skaters_by_game.csv...
+  Raw: 3,650,775 rows
+  After situation='all' filter: 730,155 rows
+  After TOI filter (≥100 min): 12,790 player-seasons
+Loading bio data...
+
+Loading pooled RAPM (training target)...
+  1,999 players
+  11,211 player-seasons matched to RAPM
+
+Fitting offensive box score model (target: BPR_O)...
+  BPR_O: R²=0.058 | G60_adj=0.000, A1_60_adj=0.000, A2_60_adj=0.000, SOG60_adj=0.018, TO60_adj=-0.000, xG60_adj=0.016, CF_pct_adj=0.000
+Fitting defensive box score model (target: BPR_D)...
+  BPR_D: R²=0.094 | BLK60_adj=-0.059, GA60_adj=-0.002, HIT60_adj=-0.001, CF_pct_adj=-0.020
+
+Generating box score ratings for all player-seasons...
+
+Wrote 12,790 player-seasons to data/box_score_ratings.csv
+
+Top 15 by box_BPR:
+         player_name position  season         toi      G60    A1_60  box_O  box_D  box_BPR
+         Brent Burns        D    2013 1160.133333 1.137800 0.568900 0.1722 0.1258   0.2980
+    Dustin Byfuglien        D    2008 1145.216667 0.785877 0.314351 0.1230 0.1307   0.2537
+         Brent Burns        D    2012  488.450000 1.105538 0.737025 0.1158 0.1118   0.2276
+          Tim Conboy        D    2008  149.983333 0.000000 0.000000 0.0225 0.2037   0.2262
+      Luke Witkowski        D    2019  106.033333 0.565860 0.565860 0.0443 0.1754   0.2197
+     Ville Koistinen        D    2009  133.183333 0.450507 0.000000 0.0265 0.1930   0.2195
+           Brad Hunt        D    2016  174.016667 0.344795 0.689589 0.0290 0.1868   0.2158
+    Dustin Byfuglien        D    2009 1346.466667 0.757538 0.311928 0.1105 0.1046   0.2151
+          Sam Rinzel        D    2024  210.250000 0.000000 0.285375 0.0485 0.1651   0.2136
+Dillon Heatherington        D    2021  111.000000 0.000000 0.000000 0.0001 0.2132   0.2133
+        Filip Chytil        F    2017  122.483333 0.489863 0.489863 0.0980 0.1007   0.1987
+        Eric Gelinas        D    2013 1015.433333 0.413617 0.768145 0.0551 0.1407   0.1958
+       Yohann Auvitu        D    2016  390.083333 0.307627 0.153813 0.0530 0.1386   0.1916
+    Oliver Kylington        D    2020  104.650000 0.000000 0.573340 0.0017 0.1876   0.1893
+     Michael Grabner        F    2009  278.116667 1.078684 0.647210 0.1347 0.0543   0.1890
+[01:31:16] box_score.py done.
+[01:31:16] Step 3/3: blend.py (RAPM + box score uncertainty-weighted blend)...
+Loading ratings...
+  RAPM pooled: 1,999 players
+  RAPM by-season: 8,936 player-seasons
+  Box score: 12,790 player-seasons
+
+Pooled: 1,999 players → data/final_ratings.csv
+
+Top 20 (final pooled BPR):
+       player_name position  final_BPR_O  final_BPR_D  final_BPR    BPR   box_BPR  rapm_weight
+     Brayden.Point        F       0.3465       0.3715     0.7180 0.8513  0.039022        0.836
+      Jeff.Skinner        F       0.3683       0.3031     0.6714 0.8046  0.111307        0.808
+Vladislav.Gavrikov        D       0.3202       0.2562     0.5764 0.7459  0.012350        0.769
+     Alex.Ovechkin        F       0.1765       0.3289     0.5054 0.5752  0.126047        0.845
+  Nathan.MacKinnon        F       0.2373       0.2673     0.5046 0.5700  0.063158        0.871
+     Victor.Hedman        D       0.2491       0.2452     0.4943 0.5442  0.035275        0.902
+      Tyson.Barrie        D       0.0618       0.4038     0.4656 0.5202  0.086129        0.874
+     Jake.Guentzel        F       0.1408       0.3227     0.4635 0.5433  0.046667        0.839
+      Dylan.Larkin        F       0.2424       0.2118     0.4542 0.5576  0.058650        0.793
+   Brandon.Montour        D       0.2455       0.2033     0.4488 0.5023  0.091944        0.870
+      Erik.Johnson        D       0.3050       0.1435     0.4485 0.5771 -0.009173        0.781
+    Connor.McDavid        F       0.4988      -0.0589     0.4399 0.4862  0.072120        0.888
+    Mikko.Rantanen        F       0.2729       0.1630     0.4359 0.5030  0.027044        0.859
+       Jeff.Carter        F       0.0773       0.3479     0.4252 0.5627  0.062212        0.725
+  Viktor.Arvidsson        F       0.2755       0.1490     0.4245 0.5592  0.027370        0.746
+Rasmus.Ristolainen        D       0.2605       0.1597     0.4202 0.5098  0.028817        0.814
+   Henri.Jokiharju        D       0.1996       0.2205     0.4201 0.5793  0.059214        0.694
+       Kevin.Fiala        F       0.1799       0.2297     0.4096 0.5192  0.075744        0.753
+      Jake.DeBrusk        F       0.3756       0.0315     0.4071 0.5417  0.047762        0.728
+      Egor.Sokolov        F       0.2952       0.1111     0.4063 0.4064       NaN        0.013
+
+Per-season: 8,936 player-seasons → data/final_ratings_by_season.csv
+
+Top 20 (final per-season BPR, most recent seasons):
+       player_name position  season  final_BPR_O  final_BPR_D  final_BPR    BPR  box_BPR  rapm_weight
+     Brayden.Point        F    2022       0.4222       0.4945     0.9167 0.9227   0.0705        0.993
+      Jeff.Skinner        F    2023       0.4795       0.4112     0.8907 0.8959   0.1138        0.993
+     Brayden.Point        F    2024       0.4016       0.4696     0.8712 0.8786   0.0301        0.991
+     Brayden.Point        F    2023       0.4166       0.4492     0.8658 0.8712   0.0500        0.993
+      Jeff.Skinner        F    2022       0.4547       0.3558     0.8105 0.8154   0.1194        0.993
+Vladislav.Gavrikov        D    2022       0.4325       0.3778     0.8103 0.8157   0.0249        0.993
+      Jeff.Skinner        F    2024       0.4346       0.3651     0.7997 0.8063   0.0512        0.991
+      Adam.Boqvist        D    2023       0.1595       0.6318     0.7913 0.7967   0.0209        0.993
+      Adam.Boqvist        D    2022       0.1640       0.6227     0.7867 0.7920   0.0505        0.993
+      Adam.Boqvist        D    2024       0.1585       0.6258     0.7843 0.7903   0.1069        0.991
+Vladislav.Gavrikov        D    2024       0.4140       0.3303     0.7443 0.7508  -0.0056        0.991
+      Simon.Benoit        D    2023       0.2444       0.4838     0.7282 0.7336  -0.0767        0.993
+        Sam.Gagner        F    2022       0.4168       0.3081     0.7249 0.7300   0.0157        0.993
+Vladislav.Gavrikov        D    2023       0.4117       0.3059     0.7176 0.7223   0.0134        0.993
+        Dean.Kukan        D    2022       0.4773       0.2252     0.7025 0.7026      NaN        0.993
+      Simon.Benoit        D    2024       0.2453       0.4491     0.6944 0.7010  -0.0381        0.991
+      Simon.Benoit        D    2022       0.2441       0.4365     0.6806 0.6857  -0.0086        0.993
+        Sam.Gagner        F    2024       0.3978       0.2724     0.6702 0.6702      NaN        0.991
+      Dylan.Larkin        F    2022       0.3545       0.3032     0.6577 0.6618   0.0841        0.993
+        Sam.Gagner        F    2023       0.3855       0.2665     0.6520 0.6572  -0.0800        0.993
+[01:31:17] blend.py done.
+[01:31:17] ===== All steps complete. Outputs: =====
+[01:31:17]   data/rapm_results.csv
+[01:31:17]   data/rapm_by_season.csv
+[01:31:17]   data/box_score_ratings.csv
+[01:31:17]   data/final_ratings.csv
+[01:31:17]   data/final_ratings_by_season.csv
+
+[14:54:37] ===== run_all.sh started =====
+[14:54:37] ===== run_all.sh started =====
+[14:54:37] Step 1/3: rapm_v2.py (pooled + per-season with two-pass quality adjustment)...
+[14:54:37] Step 1/3: rapm_v2.py (pooled + per-season with two-pass quality adjustment)...
+Identifying goalies...
+Identifying goalies...
+  227 goalie IDs to exclude
+Building position lookup...
+  227 goalie IDs to exclude
+Building position lookup...
+  2,997 skaters with position data
+  2,997 skaters with position data
+Loading clean_pbp.csv...
+Loading clean_pbp.csv...
+  1,333,234 5v5 events  seasons 2015–2024
+  1,333,234 5v5 events  seasons 2015–2024
+
+── pooled (1,333,234 events) ──────────────
+
+── pooled (1,333,234 events) ──────────────
+  1,999 skaters
+  1,999 skaters
+  Matrix: 1,333,234 × 4,003, 14,176,316 nnz
+  Matrix: 1,333,234 × 4,003, 14,176,316 nnz
+    xGF: 763,609 events with y>0 | alpha=1000
+    xGF: 763,609 events with y>0 | alpha=1000
+    GF: 44,017 events with y>0 | alpha=5000
+    GF: 44,017 events with y>0 | alpha=5000
+    SOG: 550,645 events with y>0 | alpha=1000
+    SOG: 550,645 events with y>0 | alpha=1000
+    TO: 132,930 events with y>0 | alpha=1000
+    TO: 132,930 events with y>0 | alpha=1000
+    GA: 173,000 events with y>0 | alpha=500
+    GA: 173,000 events with y>0 | alpha=500
+
+Top 15 (pooled) by BPR:
+
+Top 15 (pooled) by BPR:
+     player_name position  BPR_O  BPR_D    BPR  BPR_se  xGF_net  GF_net  SOG_net  TO_net  GA_net
+  Charlie.McAvoy        D 0.3362 0.6282 0.9645 13.0762   0.0459 -0.0052  -1.4498  1.0947  1.5216
+ Auston.Matthews        F 0.3388 0.5444 0.8832 13.0762   0.2158  0.1932  -1.5206  0.3344  0.7009
+Patrice.Bergeron        F 0.5146 0.3443 0.8589 13.0763  -0.1427 -0.1060   1.1410  0.1204  0.0173
+ Hampus.Lindholm        D 0.2889 0.5351 0.8240 13.0763  -0.0459 -0.1318  -0.5376 -0.4297  1.4877
+     Jake.Walman        D 0.1841 0.6053 0.7894 13.0774  -0.0361 -0.0902  -1.8578 -0.5021 -1.2315
+     Nick.Bonino        F 0.2138 0.5274 0.7411 13.0768  -0.0870  0.0179  -1.3654  0.0072 -0.6795
+ Matthew.Tkachuk        F 0.4246 0.2712 0.6958 13.0761   0.2075  0.3344   0.5620 -0.7678  1.9527
+    Noel.Acciari        F 0.2091 0.4399 0.6491 13.0770   0.0549 -0.3528  -1.0798  0.1899 -0.5209
+Joel.Eriksson.Ek        F 0.6142 0.0313 0.6455 13.0768   0.0297  0.1223   2.7077 -1.2485 -0.7265
+   Blake.Coleman        F 0.3903 0.2449 0.6352 13.0764   0.1154 -0.1369   0.4054  0.1186 -0.2974
+MacKenzie.Weegar        D 0.1376 0.4902 0.6278 13.0762  -0.1110 -0.0538  -1.5311  1.7710  1.4623
+  Connor.McDavid        F 0.5540 0.0678 0.6218 13.0764   0.3634  0.4015   1.0430  0.6551  0.6125
+ Gabriel.Vilardi        F 0.3160 0.2843 0.6002 13.0779   0.0225  0.0275   0.2930 -0.7545  0.0713
+        Adam.Fox        D 0.2328 0.3641 0.5968 13.0764  -0.0078 -0.0785  -0.5401  1.0221  1.4532
+     Nick.Seeler        D 0.1659 0.4105 0.5764 13.0774  -0.2352  0.0746  -0.7187 -1.2018 -2.3011
+     player_name position  BPR_O  BPR_D    BPR  BPR_se  xGF_net  GF_net  SOG_net  TO_net  GA_net
+  Charlie.McAvoy        D 0.3362 0.6282 0.9645 13.0762   0.0459 -0.0052  -1.4498  1.0947  1.5216
+ Auston.Matthews        F 0.3388 0.5444 0.8832 13.0762   0.2158  0.1932  -1.5206  0.3344  0.7009
+Patrice.Bergeron        F 0.5146 0.3443 0.8589 13.0763  -0.1427 -0.1060   1.1410  0.1204  0.0173
+ Hampus.Lindholm        D 0.2889 0.5351 0.8240 13.0763  -0.0459 -0.1318  -0.5376 -0.4297  1.4877
+     Jake.Walman        D 0.1841 0.6053 0.7894 13.0774  -0.0361 -0.0902  -1.8578 -0.5021 -1.2315
+     Nick.Bonino        F 0.2138 0.5274 0.7411 13.0768  -0.0870  0.0179  -1.3654  0.0072 -0.6795
+ Matthew.Tkachuk        F 0.4246 0.2712 0.6958 13.0761   0.2075  0.3344   0.5620 -0.7678  1.9527
+    Noel.Acciari        F 0.2091 0.4399 0.6491 13.0770   0.0549 -0.3528  -1.0798  0.1899 -0.5209
+Joel.Eriksson.Ek        F 0.6142 0.0313 0.6455 13.0768   0.0297  0.1223   2.7077 -1.2485 -0.7265
+   Blake.Coleman        F 0.3903 0.2449 0.6352 13.0764   0.1154 -0.1369   0.4054  0.1186 -0.2974
+MacKenzie.Weegar        D 0.1376 0.4902 0.6278 13.0762  -0.1110 -0.0538  -1.5311  1.7710  1.4623
+  Connor.McDavid        F 0.5540 0.0678 0.6218 13.0764   0.3634  0.4015   1.0430  0.6551  0.6125
+ Gabriel.Vilardi        F 0.3160 0.2843 0.6002 13.0779   0.0225  0.0275   0.2930 -0.7545  0.0713
+        Adam.Fox        D 0.2328 0.3641 0.5968 13.0764  -0.0078 -0.0785  -0.5401  1.0221  1.4532
+     Nick.Seeler        D 0.1659 0.4105 0.5764 13.0774  -0.2352  0.0746  -0.7187 -1.2018 -2.3011
+  Pass-1 quality lookup: 1,999 players
+  Pass-1 quality lookup: 1,999 players
+
+── season 2015 (141,015 events) ──────────────
+
+── season 2015 (141,015 events) ──────────────
+  883 skaters
+  883 skaters
+  Matrix: 141,015 × 1,773, 1,779,216 nnz + 2 quality covars
+  Matrix: 141,015 × 1,773, 1,779,216 nnz + 2 quality covars
+Traceback (most recent call last):
+Traceback (most recent call last):
+  File "/Users/spencerthompson/Desktop/Projects/nhl-rapm/rapm_v2.py", line 416, in <module>
+    sout, _, _, _ = run_frame(
+                    ~~~~~~~~~^
+        sf, label=f"season {season}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        prior_coefs=season_prior,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^
+        pass1_quality=pass1_quality,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/spencerthompson/Desktop/Projects/nhl-rapm/rapm_v2.py", line 309, in run_frame
+    results, all_coefs = fit_rapm(frame, X, player_ids,
+                         ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+                                   prior_coefs=prior_coefs, sample_weight=sample_weight)
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/spencerthompson/Desktop/Projects/nhl-rapm/rapm_v2.py", line 247, in fit_rapm
+    y_fit = y - X.dot(mu) if mu is not None else y
+                ~~~~~^^^^
+  File "/Users/spencerthompson/Desktop/Projects/nhl-rapm/rapm_v2.py", line 416, in <module>
+    sout, _, _, _ = run_frame(
+                    ~~~~~~~~~^
+        sf, label=f"season {season}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        prior_coefs=season_prior,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^
+        pass1_quality=pass1_quality,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/spencerthompson/Desktop/Projects/nhl-rapm/rapm_v2.py", line 309, in run_frame
+    results, all_coefs = fit_rapm(frame, X, player_ids,
+                         ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+                                   prior_coefs=prior_coefs, sample_weight=sample_weight)
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/spencerthompson/Desktop/Projects/nhl-rapm/rapm_v2.py", line 247, in fit_rapm
+    y_fit = y - X.dot(mu) if mu is not None else y
+                ~~~~~^^^^
+  File "/Users/spencerthompson/Desktop/Projects/nhl-rapm/.venv/lib/python3.13/site-packages/scipy/sparse/_base.py", line 603, in dot
+    return self @ other
+           ~~~~~^~~~~~~
+  File "/Users/spencerthompson/Desktop/Projects/nhl-rapm/.venv/lib/python3.13/site-packages/scipy/sparse/_base.py", line 923, in __matmul__
+    return self._matmul_dispatch(other)
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/Users/spencerthompson/Desktop/Projects/nhl-rapm/.venv/lib/python3.13/site-packages/scipy/sparse/_base.py", line 845, in _matmul_dispatch
+    raise ValueError(
+        f"{err_prefix} (n,k={N}),(k={other.shape[0]},1?)->(n,1?)"
+    )
+  File "/Users/spencerthompson/Desktop/Projects/nhl-rapm/.venv/lib/python3.13/site-packages/scipy/sparse/_base.py", line 603, in dot
+    return self @ other
+           ~~~~~^~~~~~~
+  File "/Users/spencerthompson/Desktop/Projects/nhl-rapm/.venv/lib/python3.13/site-packages/scipy/sparse/_base.py", line 923, in __matmul__
+    return self._matmul_dispatch(other)
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/Users/spencerthompson/Desktop/Projects/nhl-rapm/.venv/lib/python3.13/site-packages/scipy/sparse/_base.py", line 845, in _matmul_dispatch
+    raise ValueError(
+        f"{err_prefix} (n,k={N}),(k={other.shape[0]},1?)->(n,1?)"
+    )
+ValueError: matmul: dimension mismatch with signature (n,k=1773),(k=1771,1?)->(n,1?)
+ValueError: matmul: dimension mismatch with signature (n,k=1773),(k=1771,1?)->(n,1?)
+[15:29:22] rapm_v2.py done.
+[15:29:22] rapm_v2.py done.
+[15:29:22] Step 2/3: box_score.py (MoneyPuck box scores → production ratings)...
+[15:29:22] Step 2/3: box_score.py (MoneyPuck box scores → production ratings)...
+/Users/spencerthompson/Desktop/Projects/nhl-rapm/.venv/lib/python3.13/site-packages/sklearn/utils/validation.py:2684: UserWarning: X has feature names, but StandardScaler was fitted without feature names
+  warnings.warn(
+/Users/spencerthompson/Desktop/Projects/nhl-rapm/.venv/lib/python3.13/site-packages/sklearn/utils/validation.py:2684: UserWarning: X has feature names, but StandardScaler was fitted without feature names
+  warnings.warn(
+/Users/spencerthompson/Desktop/Projects/nhl-rapm/.venv/lib/python3.13/site-packages/sklearn/utils/validation.py:2684: UserWarning: X has feature names, but StandardScaler was fitted without feature names
+  warnings.warn(
+/Users/spencerthompson/Desktop/Projects/nhl-rapm/.venv/lib/python3.13/site-packages/sklearn/utils/validation.py:2684: UserWarning: X has feature names, but StandardScaler was fitted without feature names
+  warnings.warn(
+Loading skaters_by_game.csv...
+  Raw: 3,650,775 rows
+  After situation='all' filter: 730,155 rows
+  After TOI filter (≥100 min): 12,790 player-seasons
+Loading bio data...
+
+Loading pooled RAPM (training target)...
+  1,999 players
+  11,211 player-seasons matched to RAPM
+
+Fitting offensive box score model (target: BPR_O)...
+  BPR_O: R²=0.058 | G60_adj=0.000, A1_60_adj=0.000, A2_60_adj=0.000, SOG60_adj=0.018, TO60_adj=-0.000, xG60_adj=0.016, CF_pct_adj=0.000
+Fitting defensive box score model (target: BPR_D)...
+  BPR_D: R²=0.094 | BLK60_adj=0.059, GA60_adj=0.002, HIT60_adj=0.001, CF_pct_adj=0.020
+
+Generating box score ratings for all player-seasons...
+
+Wrote 12,790 player-seasons to data/box_score_ratings.csv
+
+Top 15 by box_BPR:
+      player_name position  season         toi      G60    A1_60   box_O  box_D  box_BPR
+      Ryan Graves        D    2018  288.583333 0.623737 0.207912  0.0199 0.3389   0.3588
+      Nick Seeler        D    2023 1203.333333 0.049861 0.349030  0.0131 0.3178   0.3309
+      Cale Fleury        D    2024  180.133333 0.000000 0.000000  0.0188 0.2847   0.3035
+      John Hayden        F    2024  170.166667 0.352595 0.352595  0.0295 0.2682   0.2977
+    Alec Martinez        D    2022 1480.316667 0.121596 0.162127 -0.0056 0.2818   0.2762
+      Jordie Benn        D    2022  189.616667 0.316428 0.316428  0.0182 0.2570   0.2752
+    Brad Lukowich        D    2009  145.850000 0.411382 0.000000 -0.0407 0.3073   0.2666
+    Alec Martinez        D    2023 1047.433333 0.229132 0.286414  0.0039 0.2594   0.2633
+  Auston Matthews        F    2022 1500.600000 1.599360 1.159536  0.1244 0.1323   0.2567
+Nolan Baumgartner        D    2009  170.483333 0.351941 0.000000  0.0121 0.2428   0.2549
+  Auston Matthews        F    2023 1698.283333 2.437756 0.847915  0.1423 0.1107   0.2530
+  Auston Matthews        F    2024 1371.633333 1.443534 1.181074  0.1267 0.1250   0.2517
+ Brandon Davidson        D    2019  149.700000 0.000000 0.000000  0.0412 0.2093   0.2505
+    Karl Stollery        D    2014  147.283333 0.000000 0.000000 -0.0046 0.2539   0.2493
+      Jeff Finger        D    2009  537.733333 0.223159 0.446318 -0.0050 0.2540   0.2490
+Loading skaters_by_game.csv...
+  Raw: 3,650,775 rows
+  After situation='all' filter: 730,155 rows
+  After TOI filter (≥100 min): 12,790 player-seasons
+Loading bio data...
+
+Loading pooled RAPM (training target)...
+  1,999 players
+  11,211 player-seasons matched to RAPM
+
+Fitting offensive box score model (target: BPR_O)...
+  BPR_O: R²=0.058 | G60_adj=0.000, A1_60_adj=0.000, A2_60_adj=0.000, SOG60_adj=0.018, TO60_adj=-0.000, xG60_adj=0.016, CF_pct_adj=0.000
+Fitting defensive box score model (target: BPR_D)...
+  BPR_D: R²=0.094 | BLK60_adj=0.059, GA60_adj=0.002, HIT60_adj=0.001, CF_pct_adj=0.020
+
+Generating box score ratings for all player-seasons...
+
+Wrote 12,790 player-seasons to data/box_score_ratings.csv
+
+Top 15 by box_BPR:
+      player_name position  season         toi      G60    A1_60   box_O  box_D  box_BPR
+      Ryan Graves        D    2018  288.583333 0.623737 0.207912  0.0199 0.3389   0.3588
+      Nick Seeler        D    2023 1203.333333 0.049861 0.349030  0.0131 0.3178   0.3309
+      Cale Fleury        D    2024  180.133333 0.000000 0.000000  0.0188 0.2847   0.3035
+      John Hayden        F    2024  170.166667 0.352595 0.352595  0.0295 0.2682   0.2977
+    Alec Martinez        D    2022 1480.316667 0.121596 0.162127 -0.0056 0.2818   0.2762
+      Jordie Benn        D    2022  189.616667 0.316428 0.316428  0.0182 0.2570   0.2752
+    Brad Lukowich        D    2009  145.850000 0.411382 0.000000 -0.0407 0.3073   0.2666
+    Alec Martinez        D    2023 1047.433333 0.229132 0.286414  0.0039 0.2594   0.2633
+  Auston Matthews        F    2022 1500.600000 1.599360 1.159536  0.1244 0.1323   0.2567
+Nolan Baumgartner        D    2009  170.483333 0.351941 0.000000  0.0121 0.2428   0.2549
+  Auston Matthews        F    2023 1698.283333 2.437756 0.847915  0.1423 0.1107   0.2530
+  Auston Matthews        F    2024 1371.633333 1.443534 1.181074  0.1267 0.1250   0.2517
+ Brandon Davidson        D    2019  149.700000 0.000000 0.000000  0.0412 0.2093   0.2505
+    Karl Stollery        D    2014  147.283333 0.000000 0.000000 -0.0046 0.2539   0.2493
+      Jeff Finger        D    2009  537.733333 0.223159 0.446318 -0.0050 0.2540   0.2490
+[15:33:59] box_score.py done.
+[15:33:59] box_score.py done.
+[15:33:59] Step 3/3: blend.py (RAPM + box score uncertainty-weighted blend)...
+[15:33:59] Step 3/3: blend.py (RAPM + box score uncertainty-weighted blend)...
+Loading ratings...
+  RAPM pooled: 1,999 players
+  RAPM by-season: 8,936 player-seasons
+  Box score: 12,790 player-seasons
+
+Pooled: 1,999 players → data/final_ratings.csv
+
+rapm_weight distribution (pooled):
+count    1999.000
+mean        0.627
+std         0.372
+min         0.119
+25%         0.192
+50%         0.762
+75%         0.999
+max         1.000
+
+Top 20 (final pooled BPR):
+      player_name position          toi  final_BPR_O  final_BPR_D  final_BPR    BPR   box_BPR  rapm_weight
+   Charlie.McAvoy        D 11808.950000       0.3362       0.6282     0.9644 0.9645  0.039037        1.000
+  Auston.Matthews        F 12491.533333       0.3388       0.5444     0.8832 0.8832  0.203356        1.000
+ Patrice.Bergeron        F 19541.733333       0.5146       0.3443     0.8589 0.8589  0.111340        1.000
+  Hampus.Lindholm        D 17019.866667       0.2889       0.5351     0.8240 0.8240 -0.029958        1.000
+      Jake.Walman        D  5030.183333       0.1776       0.5801     0.7577 0.7894  0.102240        0.954
+      Nick.Bonino        F 13511.733333       0.2138       0.5274     0.7412 0.7411  0.097633        1.000
+  Matthew.Tkachuk        F 11493.500000       0.4246       0.2712     0.6958 0.6958  0.064900        1.000
+     Noel.Acciari        F  7007.383333       0.2076       0.4376     0.6452 0.6491  0.088320        0.993
+ Joel.Eriksson.Ek        F  9228.033333       0.6138       0.0313     0.6451 0.6455  0.055844        0.999
+    Blake.Coleman        F  9946.233333       0.3902       0.2448     0.6350 0.6352  0.069833        1.000
+ MacKenzie.Weegar        D 11445.000000       0.1376       0.4902     0.6278 0.6278  0.080813        1.000
+   Connor.McDavid        F 15449.366667       0.5540       0.0678     0.6218 0.6218  0.048640        1.000
+         Adam.Fox        D  9952.450000       0.2327       0.3640     0.5967 0.5968  0.035567        1.000
+   Jared.Spurgeon        D 20613.400000       0.4377       0.1292     0.5669 0.5669  0.034793        1.000
+      Nick.Seeler        D  5545.433333       0.1613       0.4044     0.5657 0.5764  0.192786        0.972
+       Mark.Stone        F 13366.816667       0.1517       0.4051     0.5568 0.5568  0.057017        1.000
+  Gabriel.Vilardi        F  4333.050000       0.2899       0.2598     0.5497 0.6002  0.028233        0.912
+Brendan.Gallagher        F 12870.433333       0.1005       0.4308     0.5313 0.5312  0.115262        1.000
+  Alexander.Edler        D 21017.500000       0.3216       0.1985     0.5201 0.5201  0.087587        1.000
+ Alex.Pietrangelo        D 26457.200000       0.4396       0.0754     0.5150 0.5150  0.044841        1.000
+
+Per-season: 8,936 player-seasons → data/final_ratings_by_season.csv
+
+rapm_weight distribution (per-season):
+count    8936.000
+mean        0.524
+std         0.399
+min         0.029
+25%         0.049
+50%         0.606
+75%         0.940
+max         1.000
+
+Top 20 (final per-season BPR, most recent seasons):
+       player_name position  season         toi  final_BPR_O  final_BPR_D  final_BPR    BPR  box_BPR  rapm_weight
+     Brayden.Point        F    2022 1612.916667       0.4211       0.4929     0.9140 0.9227   0.0817        0.990
+     Brayden.Point        F    2024 1499.900000       0.3983       0.4657     0.8640 0.8786   0.0655        0.982
+     Brayden.Point        F    2023 1623.166667       0.4154       0.4480     0.8634 0.8712   0.0824        0.990
+      Jeff.Skinner        F    2023 1183.716667       0.4488       0.3765     0.8253 0.8959   0.0302        0.918
+Vladislav.Gavrikov        D    2022 1581.933333       0.4303       0.3754     0.8057 0.8157  -0.0185        0.988
+      Jeff.Skinner        F    2022 1374.383333       0.4449       0.3451     0.7900 0.8154   0.0496        0.967
+Vladislav.Gavrikov        D    2024 1893.100000       0.4165       0.3324     0.7489 0.7508   0.0062        0.997
+Vladislav.Gavrikov        D    2023 1587.500000       0.4097       0.3042     0.7139 0.7223   0.0044        0.988
+        Dean.Kukan        D    2022         NaN       0.4773       0.2252     0.7025 0.7026      NaN        0.029
+      Simon.Benoit        D    2022 1509.233333       0.2416       0.4322     0.6738 0.6857  -0.0032        0.983
+        Sam.Gagner        F    2024         NaN       0.3978       0.2724     0.6702 0.6702      NaN        0.029
+      Simon.Benoit        D    2024 1290.616667       0.2344       0.4317     0.6661 0.7010  -0.0039        0.950
+      Dylan.Larkin        F    2022 1564.450000       0.3526       0.3007     0.6533 0.6618   0.0187        0.987
+      Simon.Benoit        D    2023 1102.600000       0.2155       0.4374     0.6529 0.7336   0.0473        0.882
+      Dylan.Cozens        F    2023 1360.816667       0.2847       0.3438     0.6285 0.6511   0.0141        0.965
+     Alex.Ovechkin        F    2023 1518.466667       0.2052       0.4225     0.6277 0.6372   0.0567        0.984
+      Jeff.Skinner        F    2024  935.983333       0.3465       0.2811     0.6276 0.8063   0.0462        0.765
+   Henri.Jokiharju        D    2023 1404.516667       0.2884       0.3293     0.6177 0.6358   0.0049        0.971
+     Tage.Thompson        F    2022 1450.033333       0.1539       0.4438     0.5977 0.6096   0.0915        0.977
+     Tage.Thompson        F    2023 1286.383333       0.1498       0.4447     0.5945 0.6224   0.0702        0.949
+Loading ratings...
+  RAPM pooled: 1,999 players
+  RAPM by-season: 8,936 player-seasons
+  Box score: 12,790 player-seasons
+
+Pooled: 1,999 players → data/final_ratings.csv
+
+rapm_weight distribution (pooled):
+count    1999.000
+mean        0.627
+std         0.372
+min         0.119
+25%         0.192
+50%         0.762
+75%         0.999
+max         1.000
+
+Top 20 (final pooled BPR):
+      player_name position          toi  final_BPR_O  final_BPR_D  final_BPR    BPR   box_BPR  rapm_weight
+   Charlie.McAvoy        D 11808.950000       0.3362       0.6282     0.9644 0.9645  0.039037        1.000
+  Auston.Matthews        F 12491.533333       0.3388       0.5444     0.8832 0.8832  0.203356        1.000
+ Patrice.Bergeron        F 19541.733333       0.5146       0.3443     0.8589 0.8589  0.111340        1.000
+  Hampus.Lindholm        D 17019.866667       0.2889       0.5351     0.8240 0.8240 -0.029958        1.000
+      Jake.Walman        D  5030.183333       0.1776       0.5801     0.7577 0.7894  0.102240        0.954
+      Nick.Bonino        F 13511.733333       0.2138       0.5274     0.7412 0.7411  0.097633        1.000
+  Matthew.Tkachuk        F 11493.500000       0.4246       0.2712     0.6958 0.6958  0.064900        1.000
+     Noel.Acciari        F  7007.383333       0.2076       0.4376     0.6452 0.6491  0.088320        0.993
+ Joel.Eriksson.Ek        F  9228.033333       0.6138       0.0313     0.6451 0.6455  0.055844        0.999
+    Blake.Coleman        F  9946.233333       0.3902       0.2448     0.6350 0.6352  0.069833        1.000
+ MacKenzie.Weegar        D 11445.000000       0.1376       0.4902     0.6278 0.6278  0.080813        1.000
+   Connor.McDavid        F 15449.366667       0.5540       0.0678     0.6218 0.6218  0.048640        1.000
+         Adam.Fox        D  9952.450000       0.2327       0.3640     0.5967 0.5968  0.035567        1.000
+   Jared.Spurgeon        D 20613.400000       0.4377       0.1292     0.5669 0.5669  0.034793        1.000
+      Nick.Seeler        D  5545.433333       0.1613       0.4044     0.5657 0.5764  0.192786        0.972
+       Mark.Stone        F 13366.816667       0.1517       0.4051     0.5568 0.5568  0.057017        1.000
+  Gabriel.Vilardi        F  4333.050000       0.2899       0.2598     0.5497 0.6002  0.028233        0.912
+Brendan.Gallagher        F 12870.433333       0.1005       0.4308     0.5313 0.5312  0.115262        1.000
+  Alexander.Edler        D 21017.500000       0.3216       0.1985     0.5201 0.5201  0.087587        1.000
+ Alex.Pietrangelo        D 26457.200000       0.4396       0.0754     0.5150 0.5150  0.044841        1.000
+
+Per-season: 8,936 player-seasons → data/final_ratings_by_season.csv
+
+rapm_weight distribution (per-season):
+count    8936.000
+mean        0.524
+std         0.399
+min         0.029
+25%         0.049
+50%         0.606
+75%         0.940
+max         1.000
+
+Top 20 (final per-season BPR, most recent seasons):
+       player_name position  season         toi  final_BPR_O  final_BPR_D  final_BPR    BPR  box_BPR  rapm_weight
+     Brayden.Point        F    2022 1612.916667       0.4211       0.4929     0.9140 0.9227   0.0817        0.990
+     Brayden.Point        F    2024 1499.900000       0.3983       0.4657     0.8640 0.8786   0.0655        0.982
+     Brayden.Point        F    2023 1623.166667       0.4154       0.4480     0.8634 0.8712   0.0824        0.990
+      Jeff.Skinner        F    2023 1183.716667       0.4488       0.3765     0.8253 0.8959   0.0302        0.918
+Vladislav.Gavrikov        D    2022 1581.933333       0.4303       0.3754     0.8057 0.8157  -0.0185        0.988
+      Jeff.Skinner        F    2022 1374.383333       0.4449       0.3451     0.7900 0.8154   0.0496        0.967
+Vladislav.Gavrikov        D    2024 1893.100000       0.4165       0.3324     0.7489 0.7508   0.0062        0.997
+Vladislav.Gavrikov        D    2023 1587.500000       0.4097       0.3042     0.7139 0.7223   0.0044        0.988
+        Dean.Kukan        D    2022         NaN       0.4773       0.2252     0.7025 0.7026      NaN        0.029
+      Simon.Benoit        D    2022 1509.233333       0.2416       0.4322     0.6738 0.6857  -0.0032        0.983
+        Sam.Gagner        F    2024         NaN       0.3978       0.2724     0.6702 0.6702      NaN        0.029
+      Simon.Benoit        D    2024 1290.616667       0.2344       0.4317     0.6661 0.7010  -0.0039        0.950
+      Dylan.Larkin        F    2022 1564.450000       0.3526       0.3007     0.6533 0.6618   0.0187        0.987
+      Simon.Benoit        D    2023 1102.600000       0.2155       0.4374     0.6529 0.7336   0.0473        0.882
+      Dylan.Cozens        F    2023 1360.816667       0.2847       0.3438     0.6285 0.6511   0.0141        0.965
+     Alex.Ovechkin        F    2023 1518.466667       0.2052       0.4225     0.6277 0.6372   0.0567        0.984
+      Jeff.Skinner        F    2024  935.983333       0.3465       0.2811     0.6276 0.8063   0.0462        0.765
+   Henri.Jokiharju        D    2023 1404.516667       0.2884       0.3293     0.6177 0.6358   0.0049        0.971
+     Tage.Thompson        F    2022 1450.033333       0.1539       0.4438     0.5977 0.6096   0.0915        0.977
+     Tage.Thompson        F    2023 1286.383333       0.1498       0.4447     0.5945 0.6224   0.0702        0.949
+[15:33:59] blend.py done.
+[15:33:59] blend.py done.
+[15:33:59] ===== All steps complete. Outputs: =====
+[15:33:59] ===== All steps complete. Outputs: =====
+[15:33:59]   data/rapm_results.csv
+[15:33:59]   data/rapm_results.csv
+[15:33:59]   data/rapm_by_season.csv
+[15:33:59]   data/rapm_by_season.csv
+[15:33:59]   data/box_score_ratings.csv
+[15:33:59]   data/box_score_ratings.csv
+[15:33:59]   data/final_ratings.csv
+[15:33:59]   data/final_ratings.csv
+[15:33:59]   data/final_ratings_by_season.csv
+[15:33:59]   data/final_ratings_by_season.csv
+
+[17:07:41] ===== run_all.sh started =====
+[17:07:41] ===== run_all.sh started =====
+[17:07:41] Step 1/3: rapm_v2.py (pooled + per-season with two-pass quality adjustment)...
+[17:07:41] Step 1/3: rapm_v2.py (pooled + per-season with two-pass quality adjustment)...
+Identifying goalies...
+Identifying goalies...
+  227 goalie IDs to exclude
+Building position lookup...
+  227 goalie IDs to exclude
+Building position lookup...
+  2,997 skaters with position data
+  2,997 skaters with position data
+Loading clean_pbp.csv...
+Loading clean_pbp.csv...
+  1,333,234 5v5 events  seasons 2015–2024
+  1,333,234 5v5 events  seasons 2015–2024
+
+── pooled (1,333,234 events) ──────────────
+
+── pooled (1,333,234 events) ──────────────
+  1,999 skaters
+  1,999 skaters
+  Matrix: 1,333,234 × 4,003, 14,176,316 nnz
+  Matrix: 1,333,234 × 4,003, 14,176,316 nnz
+    xGF: 763,609 events with y>0 | alpha=1000
+    xGF: 763,609 events with y>0 | alpha=1000
+    GF: 44,017 events with y>0 | alpha=5000
+    GF: 44,017 events with y>0 | alpha=5000
+    SOG: 550,645 events with y>0 | alpha=1000
+    SOG: 550,645 events with y>0 | alpha=1000
+    TO: 132,930 events with y>0 | alpha=1000
+    TO: 132,930 events with y>0 | alpha=1000
+    GA: 173,000 events with y>0 | alpha=500
+    GA: 173,000 events with y>0 | alpha=500
+
+Top 15 (pooled) by BPR:
+
+Top 15 (pooled) by BPR:
+     player_name position  BPR_O  BPR_D    BPR  BPR_se  xGF_net  GF_net  SOG_net  TO_net  GA_net
+  Charlie.McAvoy        D 0.3362 0.6282 0.9645 13.0762   0.0459 -0.0052  -1.4498  1.0947  1.5216
+ Auston.Matthews        F 0.3388 0.5444 0.8832 13.0762   0.2158  0.1932  -1.5206  0.3344  0.7009
+Patrice.Bergeron        F 0.5146 0.3443 0.8589 13.0763  -0.1427 -0.1060   1.1410  0.1204  0.0173
+ Hampus.Lindholm        D 0.2889 0.5351 0.8240 13.0763  -0.0459 -0.1318  -0.5376 -0.4297  1.4877
+     Jake.Walman        D 0.1841 0.6053 0.7894 13.0774  -0.0361 -0.0902  -1.8578 -0.5021 -1.2315
+     Nick.Bonino        F 0.2138 0.5274 0.7411 13.0768  -0.0870  0.0179  -1.3654  0.0072 -0.6795
+ Matthew.Tkachuk        F 0.4246 0.2712 0.6958 13.0761   0.2075  0.3344   0.5620 -0.7678  1.9527
+    Noel.Acciari        F 0.2091 0.4399 0.6491 13.0770   0.0549 -0.3528  -1.0798  0.1899 -0.5209
+Joel.Eriksson.Ek        F 0.6142 0.0313 0.6455 13.0768   0.0297  0.1223   2.7077 -1.2485 -0.7265
+   Blake.Coleman        F 0.3903 0.2449 0.6352 13.0764   0.1154 -0.1369   0.4054  0.1186 -0.2974
+MacKenzie.Weegar        D 0.1376 0.4902 0.6278 13.0762  -0.1110 -0.0538  -1.5311  1.7710  1.4623
+  Connor.McDavid        F 0.5540 0.0678 0.6218 13.0764   0.3634  0.4015   1.0430  0.6551  0.6125
+ Gabriel.Vilardi        F 0.3160 0.2843 0.6002 13.0779   0.0225  0.0275   0.2930 -0.7545  0.0713
+        Adam.Fox        D 0.2328 0.3641 0.5968 13.0764  -0.0078 -0.0785  -0.5401  1.0221  1.4532
+     Nick.Seeler        D 0.1659 0.4105 0.5764 13.0774  -0.2352  0.0746  -0.7187 -1.2018 -2.3011
+     player_name position  BPR_O  BPR_D    BPR  BPR_se  xGF_net  GF_net  SOG_net  TO_net  GA_net
+  Charlie.McAvoy        D 0.3362 0.6282 0.9645 13.0762   0.0459 -0.0052  -1.4498  1.0947  1.5216
+ Auston.Matthews        F 0.3388 0.5444 0.8832 13.0762   0.2158  0.1932  -1.5206  0.3344  0.7009
+Patrice.Bergeron        F 0.5146 0.3443 0.8589 13.0763  -0.1427 -0.1060   1.1410  0.1204  0.0173
+ Hampus.Lindholm        D 0.2889 0.5351 0.8240 13.0763  -0.0459 -0.1318  -0.5376 -0.4297  1.4877
+     Jake.Walman        D 0.1841 0.6053 0.7894 13.0774  -0.0361 -0.0902  -1.8578 -0.5021 -1.2315
+     Nick.Bonino        F 0.2138 0.5274 0.7411 13.0768  -0.0870  0.0179  -1.3654  0.0072 -0.6795
+ Matthew.Tkachuk        F 0.4246 0.2712 0.6958 13.0761   0.2075  0.3344   0.5620 -0.7678  1.9527
+    Noel.Acciari        F 0.2091 0.4399 0.6491 13.0770   0.0549 -0.3528  -1.0798  0.1899 -0.5209
+Joel.Eriksson.Ek        F 0.6142 0.0313 0.6455 13.0768   0.0297  0.1223   2.7077 -1.2485 -0.7265
+   Blake.Coleman        F 0.3903 0.2449 0.6352 13.0764   0.1154 -0.1369   0.4054  0.1186 -0.2974
+MacKenzie.Weegar        D 0.1376 0.4902 0.6278 13.0762  -0.1110 -0.0538  -1.5311  1.7710  1.4623
+  Connor.McDavid        F 0.5540 0.0678 0.6218 13.0764   0.3634  0.4015   1.0430  0.6551  0.6125
+ Gabriel.Vilardi        F 0.3160 0.2843 0.6002 13.0779   0.0225  0.0275   0.2930 -0.7545  0.0713
+        Adam.Fox        D 0.2328 0.3641 0.5968 13.0764  -0.0078 -0.0785  -0.5401  1.0221  1.4532
+     Nick.Seeler        D 0.1659 0.4105 0.5764 13.0774  -0.2352  0.0746  -0.7187 -1.2018 -2.3011
+  Pass-1 quality lookup: 1,999 players
+  Pass-1 quality lookup: 1,999 players
+
+── season 2015 (141,015 events) ──────────────
+
+── season 2015 (141,015 events) ──────────────
+  883 skaters
+  883 skaters
+  Matrix: 141,015 × 1,773, 1,779,216 nnz + 2 quality covars
+  Matrix: 141,015 × 1,773, 1,779,216 nnz + 2 quality covars
+    xGF: 81,047 events with y>0 | alpha=5000
+    xGF: 81,047 events with y>0 | alpha=5000
+    GF: 4,500 events with y>0 | alpha=5000
+    GF: 4,500 events with y>0 | alpha=5000
+    SOG: 58,265 events with y>0 | alpha=5000
+    SOG: 58,265 events with y>0 | alpha=5000
+    TO: 14,038 events with y>0 | alpha=5000
+    TO: 14,038 events with y>0 | alpha=5000
+    GA: 16,950 events with y>0 | alpha=1000
+    GA: 16,950 events with y>0 | alpha=1000
+
+── season 2016 (140,527 events) ──────────────
+
+── season 2016 (140,527 events) ──────────────
+  897 skaters
+  897 skaters
+  Matrix: 140,527 × 1,801, 1,772,571 nnz + 2 quality covars
+  Matrix: 140,527 × 1,801, 1,772,571 nnz + 2 quality covars
+    xGF: 81,426 events with y>0 | alpha=1000
+    xGF: 81,426 events with y>0 | alpha=1000
+    GF: 4,397 events with y>0 | alpha=5000
+    GF: 4,397 events with y>0 | alpha=5000
+    SOG: 58,407 events with y>0 | alpha=5000
+    SOG: 58,407 events with y>0 | alpha=5000
+    TO: 13,152 events with y>0 | alpha=5000
+    TO: 13,152 events with y>0 | alpha=5000
+    GA: 17,208 events with y>0 | alpha=1000
+    GA: 17,208 events with y>0 | alpha=1000
+
+── season 2017 (150,431 events) ──────────────
+
+── season 2017 (150,431 events) ──────────────
+  890 skaters
+  890 skaters
+  Matrix: 150,431 × 1,787, 1,897,985 nnz + 2 quality covars
+  Matrix: 150,431 × 1,787, 1,897,985 nnz + 2 quality covars
+    xGF: 86,182 events with y>0 | alpha=5000
+    xGF: 86,182 events with y>0 | alpha=5000
+    GF: 4,740 events with y>0 | alpha=5000
+    GF: 4,740 events with y>0 | alpha=5000
+    SOG: 62,009 events with y>0 | alpha=5000
+    SOG: 62,009 events with y>0 | alpha=5000
+    TO: 14,683 events with y>0 | alpha=5000
+    TO: 14,683 events with y>0 | alpha=5000
+    GA: 19,387 events with y>0 | alpha=5000
+    GA: 19,387 events with y>0 | alpha=5000
+
+── season 2018 (161,657 events) ──────────────
+
+── season 2018 (161,657 events) ──────────────
+  890 skaters
+  890 skaters
+  Matrix: 161,657 × 1,787, 2,043,065 nnz + 2 quality covars
+  Matrix: 161,657 × 1,787, 2,043,065 nnz + 2 quality covars
+    xGF: 92,527 events with y>0 | alpha=5000
+    xGF: 92,527 events with y>0 | alpha=5000
+    GF: 5,158 events with y>0 | alpha=5000
+    GF: 5,158 events with y>0 | alpha=5000
+    SOG: 66,593 events with y>0 | alpha=10000
+    SOG: 66,593 events with y>0 | alpha=10000
+    TO: 16,243 events with y>0 | alpha=5000
+    TO: 16,243 events with y>0 | alpha=5000
+    GA: 20,976 events with y>0 | alpha=5000
+    GA: 20,976 events with y>0 | alpha=5000
+
+── season 2019 (166,006 events) ──────────────
+
+── season 2019 (166,006 events) ──────────────
+  909 skaters
+  909 skaters
+  Matrix: 166,006 × 1,825, 2,099,748 nnz + 2 quality covars
+  Matrix: 166,006 × 1,825, 2,099,748 nnz + 2 quality covars
+    xGF: 93,056 events with y>0 | alpha=5000
+    xGF: 93,056 events with y>0 | alpha=5000
+    GF: 5,408 events with y>0 | alpha=5000
+    GF: 5,408 events with y>0 | alpha=5000
+    SOG: 67,221 events with y>0 | alpha=10000
+    SOG: 67,221 events with y>0 | alpha=10000
+    TO: 17,552 events with y>0 | alpha=10000
+    TO: 17,552 events with y>0 | alpha=10000
+    GA: 23,352 events with y>0 | alpha=5000
+    GA: 23,352 events with y>0 | alpha=5000
+
+── season 2020 (124,271 events) ──────────────
+
+── season 2020 (124,271 events) ──────────────
+  888 skaters
+  888 skaters
+  Matrix: 124,271 × 1,783, 1,570,751 nnz + 2 quality covars
+  Matrix: 124,271 × 1,783, 1,570,751 nnz + 2 quality covars
+    xGF: 70,017 events with y>0 | alpha=5000
+    xGF: 70,017 events with y>0 | alpha=5000
+    GF: 4,059 events with y>0 | alpha=5000
+    GF: 4,059 events with y>0 | alpha=5000
+    SOG: 50,833 events with y>0 | alpha=10000
+    SOG: 50,833 events with y>0 | alpha=10000
+    TO: 12,288 events with y>0 | alpha=10000
+    TO: 12,288 events with y>0 | alpha=10000
+    GA: 18,059 events with y>0 | alpha=5000
+    GA: 18,059 events with y>0 | alpha=5000
+
+── season 2021 (105,121 events) ──────────────
+
+── season 2021 (105,121 events) ──────────────
+  917 skaters
+  917 skaters
+  Matrix: 105,121 × 1,841, 1,328,009 nnz + 2 quality covars
+  Matrix: 105,121 × 1,841, 1,328,009 nnz + 2 quality covars
+    xGF: 61,336 events with y>0 | alpha=5000
+    xGF: 61,336 events with y>0 | alpha=5000
+    GF: 3,645 events with y>0 | alpha=5000
+    GF: 3,645 events with y>0 | alpha=5000
+    SOG: 44,561 events with y>0 | alpha=5000
+    SOG: 44,561 events with y>0 | alpha=5000
+    TO: 9,673 events with y>0 | alpha=10000
+    TO: 9,673 events with y>0 | alpha=10000
+    GA: 13,913 events with y>0 | alpha=5000
+    GA: 13,913 events with y>0 | alpha=5000
+
+── season 2022 (163,424 events) ──────────────
+
+── season 2022 (163,424 events) ──────────────
+  1,006 skaters
+  1,006 skaters
+  Matrix: 163,424 × 2,019, 2,066,171 nnz + 2 quality covars
+  Matrix: 163,424 × 2,019, 2,066,171 nnz + 2 quality covars
+    xGF: 94,894 events with y>0 | alpha=10000
+    xGF: 94,894 events with y>0 | alpha=10000
+    GF: 5,818 events with y>0 | alpha=5000
+    GF: 5,818 events with y>0 | alpha=5000
+    SOG: 69,202 events with y>0 | alpha=10000
+    SOG: 69,202 events with y>0 | alpha=10000
+    TO: 16,588 events with y>0 | alpha=50000
+    TO: 16,588 events with y>0 | alpha=50000
+    GA: 21,103 events with y>0 | alpha=10000
+    GA: 21,103 events with y>0 | alpha=10000
+
+── season 2023 (160,247 events) ──────────────
+
+── season 2023 (160,247 events) ──────────────
+  954 skaters
+  954 skaters
+  Matrix: 160,247 × 1,915, 2,025,304 nnz + 2 quality covars
+  Matrix: 160,247 × 1,915, 2,025,304 nnz + 2 quality covars
+    xGF: 91,317 events with y>0 | alpha=10000
+    xGF: 91,317 events with y>0 | alpha=10000
+    GF: 5,593 events with y>0 | alpha=5000
+    GF: 5,593 events with y>0 | alpha=5000
+    SOG: 65,307 events with y>0 | alpha=50000
+    SOG: 65,307 events with y>0 | alpha=50000
+    TO: 16,895 events with y>0 | alpha=50000
+    TO: 16,895 events with y>0 | alpha=50000
+    GA: 19,813 events with y>0 | alpha=50000
+    GA: 19,813 events with y>0 | alpha=50000
+
+── season 2024 (20,535 events) ──────────────
+
+── season 2024 (20,535 events) ──────────────
+  702 skaters
+  702 skaters
+  Matrix: 20,535 × 1,411, 259,916 nnz + 2 quality covars
+  Matrix: 20,535 × 1,411, 259,916 nnz + 2 quality covars
+    xGF: 11,807 events with y>0 | alpha=5000
+    xGF: 11,807 events with y>0 | alpha=5000
+    GF: 699 events with y>0 | alpha=5000
+    GF: 699 events with y>0 | alpha=5000
+    SOG: 8,247 events with y>0 | alpha=50000
+    SOG: 8,247 events with y>0 | alpha=50000
+    TO: 1,818 events with y>0 | alpha=50000
+    TO: 1,818 events with y>0 | alpha=50000
+    GA: 2,239 events with y>0 | alpha=10000
+    GA: 2,239 events with y>0 | alpha=10000
+
+Wrote 8,936 player-season rows to data/rapm_by_season.csv
+
+Wrote 8,936 player-season rows to data/rapm_by_season.csv
+[18:10:14] rapm_v2.py done.
+[18:10:14] rapm_v2.py done.
+[18:10:14] Step 2/3: box_score.py (MoneyPuck box scores → production ratings)...
+[18:10:14] Step 2/3: box_score.py (MoneyPuck box scores → production ratings)...
+/Users/spencerthompson/Desktop/Projects/nhl-rapm/.venv/lib/python3.13/site-packages/sklearn/utils/validation.py:2684: UserWarning: X has feature names, but StandardScaler was fitted without feature names
+  warnings.warn(
+/Users/spencerthompson/Desktop/Projects/nhl-rapm/.venv/lib/python3.13/site-packages/sklearn/utils/validation.py:2684: UserWarning: X has feature names, but StandardScaler was fitted without feature names
+  warnings.warn(
+/Users/spencerthompson/Desktop/Projects/nhl-rapm/.venv/lib/python3.13/site-packages/sklearn/utils/validation.py:2684: UserWarning: X has feature names, but StandardScaler was fitted without feature names
+  warnings.warn(
+/Users/spencerthompson/Desktop/Projects/nhl-rapm/.venv/lib/python3.13/site-packages/sklearn/utils/validation.py:2684: UserWarning: X has feature names, but StandardScaler was fitted without feature names
+  warnings.warn(
+Loading skaters_by_game.csv...
+  Raw: 3,650,775 rows
+  After situation='all' filter: 730,155 rows
+  After TOI filter (≥100 min): 12,790 player-seasons
+Loading bio data...
+
+Loading pooled RAPM (training target)...
+  1,999 players
+  11,211 player-seasons matched to RAPM
+
+Fitting offensive box score model (target: BPR_O)...
+  BPR_O: R²=0.058 | G60_adj=0.000, A1_60_adj=0.000, A2_60_adj=0.000, SOG60_adj=0.018, TO60_adj=-0.000, xG60_adj=0.016, CF_pct_adj=0.000
+Fitting defensive box score model (target: BPR_D)...
+  BPR_D: R²=0.094 | BLK60_adj=0.059, GA60_adj=0.002, HIT60_adj=0.001, CF_pct_adj=0.020
+
+Generating box score ratings for all player-seasons...
+
+Wrote 12,790 player-seasons to data/box_score_ratings.csv
+
+Top 15 by box_BPR:
+      player_name position  season         toi      G60    A1_60   box_O  box_D  box_BPR
+      Ryan Graves        D    2018  288.583333 0.623737 0.207912  0.0199 0.3389   0.3588
+      Nick Seeler        D    2023 1203.333333 0.049861 0.349030  0.0131 0.3178   0.3309
+      Cale Fleury        D    2024  180.133333 0.000000 0.000000  0.0188 0.2847   0.3035
+      John Hayden        F    2024  170.166667 0.352595 0.352595  0.0295 0.2682   0.2977
+    Alec Martinez        D    2022 1480.316667 0.121596 0.162127 -0.0056 0.2818   0.2762
+      Jordie Benn        D    2022  189.616667 0.316428 0.316428  0.0182 0.2570   0.2752
+    Brad Lukowich        D    2009  145.850000 0.411382 0.000000 -0.0407 0.3073   0.2666
+    Alec Martinez        D    2023 1047.433333 0.229132 0.286414  0.0039 0.2594   0.2633
+  Auston Matthews        F    2022 1500.600000 1.599360 1.159536  0.1244 0.1323   0.2567
+Nolan Baumgartner        D    2009  170.483333 0.351941 0.000000  0.0121 0.2428   0.2549
+  Auston Matthews        F    2023 1698.283333 2.437756 0.847915  0.1423 0.1107   0.2530
+  Auston Matthews        F    2024 1371.633333 1.443534 1.181074  0.1267 0.1250   0.2517
+ Brandon Davidson        D    2019  149.700000 0.000000 0.000000  0.0412 0.2093   0.2505
+    Karl Stollery        D    2014  147.283333 0.000000 0.000000 -0.0046 0.2539   0.2493
+      Jeff Finger        D    2009  537.733333 0.223159 0.446318 -0.0050 0.2540   0.2490
+Loading skaters_by_game.csv...
+  Raw: 3,650,775 rows
+  After situation='all' filter: 730,155 rows
+  After TOI filter (≥100 min): 12,790 player-seasons
+Loading bio data...
+
+Loading pooled RAPM (training target)...
+  1,999 players
+  11,211 player-seasons matched to RAPM
+
+Fitting offensive box score model (target: BPR_O)...
+  BPR_O: R²=0.058 | G60_adj=0.000, A1_60_adj=0.000, A2_60_adj=0.000, SOG60_adj=0.018, TO60_adj=-0.000, xG60_adj=0.016, CF_pct_adj=0.000
+Fitting defensive box score model (target: BPR_D)...
+  BPR_D: R²=0.094 | BLK60_adj=0.059, GA60_adj=0.002, HIT60_adj=0.001, CF_pct_adj=0.020
+
+Generating box score ratings for all player-seasons...
+
+Wrote 12,790 player-seasons to data/box_score_ratings.csv
+
+Top 15 by box_BPR:
+      player_name position  season         toi      G60    A1_60   box_O  box_D  box_BPR
+      Ryan Graves        D    2018  288.583333 0.623737 0.207912  0.0199 0.3389   0.3588
+      Nick Seeler        D    2023 1203.333333 0.049861 0.349030  0.0131 0.3178   0.3309
+      Cale Fleury        D    2024  180.133333 0.000000 0.000000  0.0188 0.2847   0.3035
+      John Hayden        F    2024  170.166667 0.352595 0.352595  0.0295 0.2682   0.2977
+    Alec Martinez        D    2022 1480.316667 0.121596 0.162127 -0.0056 0.2818   0.2762
+      Jordie Benn        D    2022  189.616667 0.316428 0.316428  0.0182 0.2570   0.2752
+    Brad Lukowich        D    2009  145.850000 0.411382 0.000000 -0.0407 0.3073   0.2666
+    Alec Martinez        D    2023 1047.433333 0.229132 0.286414  0.0039 0.2594   0.2633
+  Auston Matthews        F    2022 1500.600000 1.599360 1.159536  0.1244 0.1323   0.2567
+Nolan Baumgartner        D    2009  170.483333 0.351941 0.000000  0.0121 0.2428   0.2549
+  Auston Matthews        F    2023 1698.283333 2.437756 0.847915  0.1423 0.1107   0.2530
+  Auston Matthews        F    2024 1371.633333 1.443534 1.181074  0.1267 0.1250   0.2517
+ Brandon Davidson        D    2019  149.700000 0.000000 0.000000  0.0412 0.2093   0.2505
+    Karl Stollery        D    2014  147.283333 0.000000 0.000000 -0.0046 0.2539   0.2493
+      Jeff Finger        D    2009  537.733333 0.223159 0.446318 -0.0050 0.2540   0.2490
+[18:29:13] box_score.py done.
+[18:29:13] box_score.py done.
+[18:29:13] Step 3/3: blend.py (RAPM + box score uncertainty-weighted blend)...
+[18:29:13] Step 3/3: blend.py (RAPM + box score uncertainty-weighted blend)...
+Loading ratings...
+  RAPM pooled: 1,999 players
+  RAPM by-season: 8,936 player-seasons
+  Box score: 12,790 player-seasons
+
+Pooled: 1,999 players → data/final_ratings.csv
+
+rapm_weight distribution (pooled):
+count    1999.000
+mean        0.627
+std         0.372
+min         0.119
+25%         0.192
+50%         0.762
+75%         0.999
+max         1.000
+
+Top 20 (final pooled BPR):
+      player_name position          toi  final_BPR_O  final_BPR_D  final_BPR    BPR   box_BPR  rapm_weight
+   Charlie.McAvoy        D 11808.950000       0.3362       0.6282     0.9644 0.9645  0.039037        1.000
+  Auston.Matthews        F 12491.533333       0.3388       0.5444     0.8832 0.8832  0.203356        1.000
+ Patrice.Bergeron        F 19541.733333       0.5146       0.3443     0.8589 0.8589  0.111340        1.000
+  Hampus.Lindholm        D 17019.866667       0.2889       0.5351     0.8240 0.8240 -0.029958        1.000
+      Jake.Walman        D  5030.183333       0.1776       0.5801     0.7577 0.7894  0.102240        0.954
+      Nick.Bonino        F 13511.733333       0.2138       0.5274     0.7412 0.7411  0.097633        1.000
+  Matthew.Tkachuk        F 11493.500000       0.4246       0.2712     0.6958 0.6958  0.064900        1.000
+     Noel.Acciari        F  7007.383333       0.2076       0.4376     0.6452 0.6491  0.088320        0.993
+ Joel.Eriksson.Ek        F  9228.033333       0.6138       0.0313     0.6451 0.6455  0.055844        0.999
+    Blake.Coleman        F  9946.233333       0.3902       0.2448     0.6350 0.6352  0.069833        1.000
+ MacKenzie.Weegar        D 11445.000000       0.1376       0.4902     0.6278 0.6278  0.080813        1.000
+   Connor.McDavid        F 15449.366667       0.5540       0.0678     0.6218 0.6218  0.048640        1.000
+         Adam.Fox        D  9952.450000       0.2327       0.3640     0.5967 0.5968  0.035567        1.000
+   Jared.Spurgeon        D 20613.400000       0.4377       0.1292     0.5669 0.5669  0.034793        1.000
+      Nick.Seeler        D  5545.433333       0.1613       0.4044     0.5657 0.5764  0.192786        0.972
+       Mark.Stone        F 13366.816667       0.1517       0.4051     0.5568 0.5568  0.057017        1.000
+  Gabriel.Vilardi        F  4333.050000       0.2899       0.2598     0.5497 0.6002  0.028233        0.912
+Brendan.Gallagher        F 12870.433333       0.1005       0.4308     0.5313 0.5312  0.115262        1.000
+  Alexander.Edler        D 21017.500000       0.3216       0.1985     0.5201 0.5201  0.087587        1.000
+ Alex.Pietrangelo        D 26457.200000       0.4396       0.0754     0.5150 0.5150  0.044841        1.000
+
+Per-season: 8,936 player-seasons → data/final_ratings_by_season.csv
+
+rapm_weight distribution (per-season):
+count    8936.000
+mean        0.524
+std         0.399
+min         0.029
+25%         0.049
+50%         0.606
+75%         0.940
+max         1.000
+
+Top 20 (final per-season BPR, most recent seasons):
+     player_name position  season         toi  final_BPR_O  final_BPR_D  final_BPR    BPR  box_BPR  rapm_weight
+  Charlie.McAvoy        D    2022 1494.300000       0.4363       0.6604     1.0967 1.1158   0.0838        0.982
+ Auston.Matthews        F    2022 1500.600000       0.4252       0.5663     0.9915 1.0049   0.2567        0.982
+  Charlie.McAvoy        D    2023 1838.600000       0.3243       0.6309     0.9552 0.9580   0.0715        0.997
+Patrice.Bergeron        F    2022 1356.550000       0.5963       0.3444     0.9407 0.9701   0.1560        0.964
+  Charlie.McAvoy        D    2024 1183.516667       0.3278       0.5717     0.8995 0.9767   0.0312        0.918
+ Auston.Matthews        F    2023 1698.283333       0.3406       0.5585     0.8991 0.9034   0.2530        0.993
+ Auston.Matthews        F    2024 1371.633333       0.3382       0.5352     0.8734 0.8951   0.2517        0.966
+Patrice.Bergeron        F    2023         NaN       0.5113       0.3577     0.8690 0.8690      NaN        0.029
+ Hampus.Lindholm        D    2023 1699.950000       0.3113       0.5565     0.8678 0.8741  -0.0452        0.993
+ Hampus.Lindholm        D    2022 1854.950000       0.3029       0.5201     0.8230 0.8257  -0.0211        0.997
+  Connor.McDavid        F    2022 1835.616667       0.6724       0.1226     0.7950 0.7973   0.1074        0.997
+     Jake.Walman        D    2023 1245.466667       0.1851       0.6026     0.7877 0.8290   0.1571        0.939
+     Jake.Walman        D    2022 1242.266667       0.1813       0.5990     0.7803 0.8243   0.1183        0.938
+     Jake.Walman        D    2024 1480.133333       0.1725       0.6060     0.7785 0.7913   0.1413        0.980
+ Matthew.Tkachuk        F    2023 1491.200000       0.4945       0.2737     0.7682 0.7806   0.1226        0.981
+ Matthew.Tkachuk        F    2022 1614.433333       0.4634       0.2857     0.7491 0.7554   0.1410        0.990
+     Nick.Bonino        F    2024         NaN       0.2119       0.5353     0.7472 0.7472      NaN        0.029
+Joel.Eriksson.Ek        F    2022 1481.583333       0.6385       0.0466     0.6851 0.6968   0.1055        0.980
+        Adam.Fox        D    2022 1998.966667       0.2448       0.4190     0.6638 0.6646   0.0213        0.998
+MacKenzie.Weegar        D    2022 1708.983333       0.1531       0.4847     0.6378 0.6416   0.0484        0.994
+Loading ratings...
+  RAPM pooled: 1,999 players
+  RAPM by-season: 8,936 player-seasons
+  Box score: 12,790 player-seasons
+
+Pooled: 1,999 players → data/final_ratings.csv
+
+rapm_weight distribution (pooled):
+count    1999.000
+mean        0.627
+std         0.372
+min         0.119
+25%         0.192
+50%         0.762
+75%         0.999
+max         1.000
+
+Top 20 (final pooled BPR):
+      player_name position          toi  final_BPR_O  final_BPR_D  final_BPR    BPR   box_BPR  rapm_weight
+   Charlie.McAvoy        D 11808.950000       0.3362       0.6282     0.9644 0.9645  0.039037        1.000
+  Auston.Matthews        F 12491.533333       0.3388       0.5444     0.8832 0.8832  0.203356        1.000
+ Patrice.Bergeron        F 19541.733333       0.5146       0.3443     0.8589 0.8589  0.111340        1.000
+  Hampus.Lindholm        D 17019.866667       0.2889       0.5351     0.8240 0.8240 -0.029958        1.000
+      Jake.Walman        D  5030.183333       0.1776       0.5801     0.7577 0.7894  0.102240        0.954
+      Nick.Bonino        F 13511.733333       0.2138       0.5274     0.7412 0.7411  0.097633        1.000
+  Matthew.Tkachuk        F 11493.500000       0.4246       0.2712     0.6958 0.6958  0.064900        1.000
+     Noel.Acciari        F  7007.383333       0.2076       0.4376     0.6452 0.6491  0.088320        0.993
+ Joel.Eriksson.Ek        F  9228.033333       0.6138       0.0313     0.6451 0.6455  0.055844        0.999
+    Blake.Coleman        F  9946.233333       0.3902       0.2448     0.6350 0.6352  0.069833        1.000
+ MacKenzie.Weegar        D 11445.000000       0.1376       0.4902     0.6278 0.6278  0.080813        1.000
+   Connor.McDavid        F 15449.366667       0.5540       0.0678     0.6218 0.6218  0.048640        1.000
+         Adam.Fox        D  9952.450000       0.2327       0.3640     0.5967 0.5968  0.035567        1.000
+   Jared.Spurgeon        D 20613.400000       0.4377       0.1292     0.5669 0.5669  0.034793        1.000
+      Nick.Seeler        D  5545.433333       0.1613       0.4044     0.5657 0.5764  0.192786        0.972
+       Mark.Stone        F 13366.816667       0.1517       0.4051     0.5568 0.5568  0.057017        1.000
+  Gabriel.Vilardi        F  4333.050000       0.2899       0.2598     0.5497 0.6002  0.028233        0.912
+Brendan.Gallagher        F 12870.433333       0.1005       0.4308     0.5313 0.5312  0.115262        1.000
+  Alexander.Edler        D 21017.500000       0.3216       0.1985     0.5201 0.5201  0.087587        1.000
+ Alex.Pietrangelo        D 26457.200000       0.4396       0.0754     0.5150 0.5150  0.044841        1.000
+
+Per-season: 8,936 player-seasons → data/final_ratings_by_season.csv
+
+rapm_weight distribution (per-season):
+count    8936.000
+mean        0.524
+std         0.399
+min         0.029
+25%         0.049
+50%         0.606
+75%         0.940
+max         1.000
+
+Top 20 (final per-season BPR, most recent seasons):
+     player_name position  season         toi  final_BPR_O  final_BPR_D  final_BPR    BPR  box_BPR  rapm_weight
+  Charlie.McAvoy        D    2022 1494.300000       0.4363       0.6604     1.0967 1.1158   0.0838        0.982
+ Auston.Matthews        F    2022 1500.600000       0.4252       0.5663     0.9915 1.0049   0.2567        0.982
+  Charlie.McAvoy        D    2023 1838.600000       0.3243       0.6309     0.9552 0.9580   0.0715        0.997
+Patrice.Bergeron        F    2022 1356.550000       0.5963       0.3444     0.9407 0.9701   0.1560        0.964
+  Charlie.McAvoy        D    2024 1183.516667       0.3278       0.5717     0.8995 0.9767   0.0312        0.918
+ Auston.Matthews        F    2023 1698.283333       0.3406       0.5585     0.8991 0.9034   0.2530        0.993
+ Auston.Matthews        F    2024 1371.633333       0.3382       0.5352     0.8734 0.8951   0.2517        0.966
+Patrice.Bergeron        F    2023         NaN       0.5113       0.3577     0.8690 0.8690      NaN        0.029
+ Hampus.Lindholm        D    2023 1699.950000       0.3113       0.5565     0.8678 0.8741  -0.0452        0.993
+ Hampus.Lindholm        D    2022 1854.950000       0.3029       0.5201     0.8230 0.8257  -0.0211        0.997
+  Connor.McDavid        F    2022 1835.616667       0.6724       0.1226     0.7950 0.7973   0.1074        0.997
+     Jake.Walman        D    2023 1245.466667       0.1851       0.6026     0.7877 0.8290   0.1571        0.939
+     Jake.Walman        D    2022 1242.266667       0.1813       0.5990     0.7803 0.8243   0.1183        0.938
+     Jake.Walman        D    2024 1480.133333       0.1725       0.6060     0.7785 0.7913   0.1413        0.980
+ Matthew.Tkachuk        F    2023 1491.200000       0.4945       0.2737     0.7682 0.7806   0.1226        0.981
+ Matthew.Tkachuk        F    2022 1614.433333       0.4634       0.2857     0.7491 0.7554   0.1410        0.990
+     Nick.Bonino        F    2024         NaN       0.2119       0.5353     0.7472 0.7472      NaN        0.029
+Joel.Eriksson.Ek        F    2022 1481.583333       0.6385       0.0466     0.6851 0.6968   0.1055        0.980
+        Adam.Fox        D    2022 1998.966667       0.2448       0.4190     0.6638 0.6646   0.0213        0.998
+MacKenzie.Weegar        D    2022 1708.983333       0.1531       0.4847     0.6378 0.6416   0.0484        0.994
+[18:29:14] blend.py done.
+[18:29:14] blend.py done.
+[18:29:14] ===== All steps complete. Outputs: =====
+[18:29:14] ===== All steps complete. Outputs: =====
+[18:29:14]   data/rapm_results.csv
+[18:29:14]   data/rapm_results.csv
+[18:29:14]   data/rapm_by_season.csv
+[18:29:14]   data/rapm_by_season.csv
+[18:29:14]   data/box_score_ratings.csv
+[18:29:14]   data/box_score_ratings.csv
+[18:29:14]   data/final_ratings.csv
+[18:29:14]   data/final_ratings.csv
+[18:29:14]   data/final_ratings_by_season.csv
+[18:29:14]   data/final_ratings_by_season.csv
+
+[23:41:46] ===== run_all.sh started =====
+[23:41:46] Step 1/4: rapm_v2.py (pooled + per-season with two-pass quality adjustment)...
+Identifying goalies...
+  227 goalie IDs to exclude
+Building position lookup...
+  2,997 skaters with position data
+Loading clean_pbp.csv...
+  1,333,234 5v5 events  seasons 2015–2024
+
+── pooled (1,333,234 events) ──────────────
+  1,999 skaters
+  Matrix: 1,333,234 × 4,003, 14,176,316 nnz
+    xGF: 763,609 events with y>0 | alpha=1000
+    GF: 44,017 events with y>0 | alpha=5000
+    SOG: 550,645 events with y>0 | alpha=1000
+    TO: 132,930 events with y>0 | alpha=1000
+    GA: 173,000 events with y>0 | alpha=500
+
+Top 15 (pooled) by BPR:
+     player_name position  BPR_O  BPR_D    BPR  BPR_se  xGF_net  GF_net  SOG_net  TO_net  GA_net
+  Charlie.McAvoy        D 0.3362 0.6282 0.9645 13.0762   0.0459 -0.0052  -1.4498  1.0947  1.5216
+ Auston.Matthews        F 0.3388 0.5444 0.8832 13.0762   0.2158  0.1932  -1.5206  0.3344  0.7009
+Patrice.Bergeron        F 0.5146 0.3443 0.8589 13.0763  -0.1427 -0.1060   1.1410  0.1204  0.0173
+ Hampus.Lindholm        D 0.2889 0.5351 0.8240 13.0763  -0.0459 -0.1318  -0.5376 -0.4297  1.4877
+     Jake.Walman        D 0.1841 0.6053 0.7894 13.0774  -0.0361 -0.0902  -1.8578 -0.5021 -1.2315
+     Nick.Bonino        F 0.2138 0.5274 0.7411 13.0768  -0.0870  0.0179  -1.3654  0.0072 -0.6795
+ Matthew.Tkachuk        F 0.4246 0.2712 0.6958 13.0761   0.2075  0.3344   0.5620 -0.7678  1.9527
+    Noel.Acciari        F 0.2091 0.4399 0.6491 13.0770   0.0549 -0.3528  -1.0798  0.1899 -0.5209
+Joel.Eriksson.Ek        F 0.6142 0.0313 0.6455 13.0768   0.0297  0.1223   2.7077 -1.2485 -0.7265
+   Blake.Coleman        F 0.3903 0.2449 0.6352 13.0764   0.1154 -0.1369   0.4054  0.1186 -0.2974
+MacKenzie.Weegar        D 0.1376 0.4902 0.6278 13.0762  -0.1110 -0.0538  -1.5311  1.7710  1.4623
+  Connor.McDavid        F 0.5540 0.0678 0.6218 13.0764   0.3634  0.4015   1.0430  0.6551  0.6125
+ Gabriel.Vilardi        F 0.3160 0.2843 0.6002 13.0779   0.0225  0.0275   0.2930 -0.7545  0.0713
+        Adam.Fox        D 0.2328 0.3641 0.5968 13.0764  -0.0078 -0.0785  -0.5401  1.0221  1.4532
+     Nick.Seeler        D 0.1659 0.4105 0.5764 13.0774  -0.2352  0.0746  -0.7187 -1.2018 -2.3011
+  Pass-1 quality lookup: 1,999 players
+
+── season 2015 (141,015 events) ──────────────
+  883 skaters
+  Matrix: 141,015 × 1,773, 1,779,216 nnz + 2 quality covars
+    xGF: 81,047 events with y>0 | alpha=5000
+    GF: 4,500 events with y>0 | alpha=5000
+    SOG: 58,265 events with y>0 | alpha=5000
+    TO: 14,038 events with y>0 | alpha=5000
+    GA: 16,950 events with y>0 | alpha=1000
+
+── season 2016 (140,527 events) ──────────────
+  897 skaters
+  Matrix: 140,527 × 1,801, 1,772,571 nnz + 2 quality covars
+    xGF: 81,426 events with y>0 | alpha=1000
+    GF: 4,397 events with y>0 | alpha=5000
+    SOG: 58,407 events with y>0 | alpha=5000
+    TO: 13,152 events with y>0 | alpha=5000
+    GA: 17,208 events with y>0 | alpha=1000
+
+── season 2017 (150,431 events) ──────────────
+  890 skaters
+  Matrix: 150,431 × 1,787, 1,897,985 nnz + 2 quality covars
+    xGF: 86,182 events with y>0 | alpha=5000
+    GF: 4,740 events with y>0 | alpha=5000
+    SOG: 62,009 events with y>0 | alpha=5000
+    TO: 14,683 events with y>0 | alpha=5000
+    GA: 19,387 events with y>0 | alpha=5000
+
+── season 2018 (161,657 events) ──────────────
+  890 skaters
+  Matrix: 161,657 × 1,787, 2,043,065 nnz + 2 quality covars
+    xGF: 92,527 events with y>0 | alpha=5000
+    GF: 5,158 events with y>0 | alpha=5000
+    SOG: 66,593 events with y>0 | alpha=10000
+    TO: 16,243 events with y>0 | alpha=5000
+    GA: 20,976 events with y>0 | alpha=5000
+
+── season 2019 (166,006 events) ──────────────
+  909 skaters
+  Matrix: 166,006 × 1,825, 2,099,748 nnz + 2 quality covars
+    xGF: 93,056 events with y>0 | alpha=5000
+    GF: 5,408 events with y>0 | alpha=5000
+    SOG: 67,221 events with y>0 | alpha=10000
+    TO: 17,552 events with y>0 | alpha=10000
+    GA: 23,352 events with y>0 | alpha=5000
+
+── season 2020 (124,271 events) ──────────────
+  888 skaters
+  Matrix: 124,271 × 1,783, 1,570,751 nnz + 2 quality covars
+    xGF: 70,017 events with y>0 | alpha=5000
+    GF: 4,059 events with y>0 | alpha=5000
+    SOG: 50,833 events with y>0 | alpha=10000
+    TO: 12,288 events with y>0 | alpha=10000
+    GA: 18,059 events with y>0 | alpha=5000
+
+── season 2021 (105,121 events) ──────────────
+  917 skaters
+  Matrix: 105,121 × 1,841, 1,328,009 nnz + 2 quality covars
+    xGF: 61,336 events with y>0 | alpha=5000
+    GF: 3,645 events with y>0 | alpha=5000
+    SOG: 44,561 events with y>0 | alpha=5000
+    TO: 9,673 events with y>0 | alpha=10000
+    GA: 13,913 events with y>0 | alpha=5000
+
+── season 2022 (163,424 events) ──────────────
+  1,006 skaters
+  Matrix: 163,424 × 2,019, 2,066,171 nnz + 2 quality covars
+    xGF: 94,894 events with y>0 | alpha=10000
+    GF: 5,818 events with y>0 | alpha=5000
+    SOG: 69,202 events with y>0 | alpha=10000
+    TO: 16,588 events with y>0 | alpha=50000
+    GA: 21,103 events with y>0 | alpha=10000
+
+── season 2023 (160,247 events) ──────────────
+  954 skaters
+  Matrix: 160,247 × 1,915, 2,025,304 nnz + 2 quality covars
+    xGF: 91,317 events with y>0 | alpha=10000
+    GF: 5,593 events with y>0 | alpha=5000
+    SOG: 65,307 events with y>0 | alpha=50000
+    TO: 16,895 events with y>0 | alpha=50000
+    GA: 19,813 events with y>0 | alpha=50000
+
+── season 2024 (20,535 events) ──────────────
+  702 skaters
+  Matrix: 20,535 × 1,411, 259,916 nnz + 2 quality covars
+    xGF: 11,807 events with y>0 | alpha=5000
+    GF: 699 events with y>0 | alpha=5000
+    SOG: 8,247 events with y>0 | alpha=50000
+    TO: 1,818 events with y>0 | alpha=50000
+    GA: 2,239 events with y>0 | alpha=10000
+
+Wrote 8,936 player-season rows to data/rapm_by_season.csv
+[00:30:49] rapm_v2.py done.
+[00:30:49] Step 2/4: box_score.py (MoneyPuck box scores → production ratings)...
+/Users/spencerthompson/Desktop/Projects/nhl-rapm/.venv/lib/python3.13/site-packages/sklearn/utils/validation.py:2684: UserWarning: X has feature names, but StandardScaler was fitted without feature names
+  warnings.warn(
+/Users/spencerthompson/Desktop/Projects/nhl-rapm/.venv/lib/python3.13/site-packages/sklearn/utils/validation.py:2684: UserWarning: X has feature names, but StandardScaler was fitted without feature names
+  warnings.warn(
+Loading skaters_by_game.csv...
+  Raw: 3,650,775 rows
+  After situation='all' filter: 730,155 rows
+  After TOI filter (≥100 min): 12,790 player-seasons
+Loading bio data...
+
+Loading pooled RAPM (training target)...
+  1,999 players
+  11,211 player-seasons matched to RAPM
+
+Fitting offensive box score model (target: BPR_O)...
+  BPR_O: R²=0.058 | G60_adj=0.000, A1_60_adj=0.000, A2_60_adj=0.000, SOG60_adj=0.018, TO60_adj=-0.000, xG60_adj=0.016, CF_pct_adj=0.000
+Fitting defensive box score model (target: BPR_D)...
+  BPR_D: R²=0.094 | BLK60_adj=0.059, GA60_adj=0.002, HIT60_adj=0.001, CF_pct_adj=0.020
+
+Generating box score ratings for all player-seasons...
+
+Wrote 12,790 player-seasons to data/box_score_ratings.csv
+
+Top 15 by box_BPR:
+      player_name position  season         toi      G60    A1_60   box_O  box_D  box_BPR
+      Ryan Graves        D    2018  288.583333 0.623737 0.207912  0.0199 0.3389   0.3588
+      Nick Seeler        D    2023 1203.333333 0.049861 0.349030  0.0131 0.3178   0.3309
+      Cale Fleury        D    2024  180.133333 0.000000 0.000000  0.0188 0.2847   0.3035
+      John Hayden        F    2024  170.166667 0.352595 0.352595  0.0295 0.2682   0.2977
+    Alec Martinez        D    2022 1480.316667 0.121596 0.162127 -0.0056 0.2818   0.2762
+      Jordie Benn        D    2022  189.616667 0.316428 0.316428  0.0182 0.2570   0.2752
+    Brad Lukowich        D    2009  145.850000 0.411382 0.000000 -0.0407 0.3073   0.2666
+    Alec Martinez        D    2023 1047.433333 0.229132 0.286414  0.0039 0.2594   0.2633
+  Auston Matthews        F    2022 1500.600000 1.599360 1.159536  0.1244 0.1323   0.2567
+Nolan Baumgartner        D    2009  170.483333 0.351941 0.000000  0.0121 0.2428   0.2549
+  Auston Matthews        F    2023 1698.283333 2.437756 0.847915  0.1423 0.1107   0.2530
+  Auston Matthews        F    2024 1371.633333 1.443534 1.181074  0.1267 0.1250   0.2517
+ Brandon Davidson        D    2019  149.700000 0.000000 0.000000  0.0412 0.2093   0.2505
+    Karl Stollery        D    2014  147.283333 0.000000 0.000000 -0.0046 0.2539   0.2493
+      Jeff Finger        D    2009  537.733333 0.223159 0.446318 -0.0050 0.2540   0.2490
+[00:35:58] box_score.py done.
+[00:35:58] Step 3/4: pp_pk_rapm.py (PP/PK RAPM — PP_O and PK_D ratings)...
+Identifying goalies...
+  227 goalie IDs to exclude
+Loading clean_pbp.csv...
+  PP/PK events: 281,114
+
+── PP/PK model ──────────────────────────────────────────
+  1,870 skaters
+  Matrix: 281,114 × 3,740, 2,542,678 nnz
+  After MIN_EVENTS=300 filter: 1,055 skaters
+  xGF: 144,689 PP events | alpha=5000
+  GF: 13,526 PP events | alpha=5000
+
+Wrote 1,055 players → data/pp_rapm.csv
+
+Top 20 PP specialists (PP_O):
+        player_name position   PP_O    PK_D  PP_BPR
+     Connor.McDavid        F 0.9319  0.1789  1.1108
+Ryan.Nugent.Hopkins        F 0.8977 -0.0427  0.8550
+      Brayden.Point        F 0.8000 -0.0124  0.7876
+     Mikko.Rantanen        F 0.6845  0.0062  0.6907
+   Patrice.Bergeron        F 0.6780  0.0711  0.7491
+        Roope.Hintz        F 0.6032  0.0799  0.6831
+    Nikita.Kucherov        F 0.5953  0.2346  0.8299
+     Leon.Draisaitl        F 0.5881  0.0448  0.6329
+   Patric.Hornqvist        F 0.5823  0.0042  0.5865
+     Steven.Stamkos        F 0.5732  0.1556  0.7288
+       John.Tavares        F 0.5556  0.0065  0.5621
+  Nicklas.Backstrom        F 0.5553 -0.0621  0.4932
+     Artemi.Panarin        F 0.5187  0.0131  0.5318
+       David.Perron        F 0.4995  0.0173  0.5168
+           Adam.Fox        D 0.4948  0.0239  0.5187
+   Nathan.MacKinnon        F 0.4855 -0.0064  0.4791
+         T.J..Oshie        F 0.4808  0.0010  0.4818
+  Mathieu.Perreault        F 0.4801 -0.0106  0.4695
+      Ryan.O'Reilly        F 0.4655 -0.0759  0.3896
+         Zach.Hyman        F 0.4638  0.0615  0.5253
+
+Top 20 PK specialists (PK_D):
+          player_name position    PP_O   PK_D  PP_BPR
+         PA.Parenteau        F -0.0390 0.6586  0.6196
+           Matt.Carle        D  0.0005 0.6035  0.6040
+   Michael.Cammalleri        F -0.0847 0.5282  0.4435
+        Tony.DeAngelo        D  0.2688 0.2406  0.5094
+      Nikita.Kucherov        F  0.5953 0.2346  0.8299
+        Alex.Petrovic        D -0.0983 0.1998  0.1015
+      Andrew.Cogliano        F -0.0874 0.1946  0.1072
+       Connor.McDavid        F  0.9319 0.1789  1.1108
+         Ondrej.Palat        F  0.2991 0.1751  0.4742
+     David.Desharnais        F -0.1434 0.1741  0.0307
+        Brad.Marchand        F  0.4088 0.1703  0.5791
+       Patrick.Maroon        F -0.0762 0.1653  0.0891
+      Michael.Grabner        F -0.0546 0.1618  0.1072
+       Steven.Stamkos        F  0.5732 0.1556  0.7288
+        Lee.Stempniak        F -0.1312 0.1546  0.0234
+         Evander.Kane        F -0.1658 0.1523 -0.0135
+          Phil.Varone        F -0.0066 0.1506  0.1440
+     Vincent.Trocheck        F  0.0280 0.1437  0.1717
+     Teuvo.Teravainen        F  0.2549 0.1409  0.3958
+Vladislav.Namestnikov        F -0.0838 0.1375  0.0537
+[00:37:02] pp_pk_rapm.py done.
+[00:37:02] Step 4/4: blend.py (RAPM + box score + PP/PK uncertainty-weighted blend)...
+Loading ratings...
+  RAPM pooled: 1,999 players
+  RAPM by-season: 8,936 player-seasons
+  Box score: 12,790 player-seasons
+  PP/PK RAPM: 1,055 players
+
+Pooled: 1,999 players → data/final_ratings.csv
+
+rapm_weight distribution (pooled):
+count    1999.000
+mean        0.627
+std         0.372
+min         0.119
+25%         0.192
+50%         0.762
+75%         0.999
+max         1.000
+
+Top 20 (total_BPR including PP/PK):
+      player_name position          toi  final_BPR    PP_O    PK_D  total_BPR  pp_toi_frac
+   Charlie.McAvoy        D 11808.950000     0.9644  0.0254  0.1310     0.8026        0.104
+  Auston.Matthews        F 12491.533333     0.8832  0.2530  0.0461     0.7759        0.150
+ Patrice.Bergeron        F 19541.733333     0.8589  0.6780  0.0711     0.7520        0.153
+  Hampus.Lindholm        D 17019.866667     0.8240  0.0353  0.0709     0.6907        0.077
+   Connor.McDavid        F 15449.366667     0.6218  0.9319  0.1789     0.6596        0.159
+      Jake.Walman        D  5030.183333     0.7577 -0.0985 -0.0152     0.6330        0.055
+  Matthew.Tkachuk        F 11493.500000     0.6958  0.2489 -0.0092     0.6116        0.180
+      Nick.Bonino        F 13511.733333     0.7412 -0.1714 -0.0181     0.5630        0.099
+    Blake.Coleman        F  9946.233333     0.6350 -0.0221  0.0931     0.5468        0.034
+     Noel.Acciari        F  7007.383333     0.6452 -0.0221 -0.0771     0.5435        0.007
+ MacKenzie.Weegar        D 11445.000000     0.6278 -0.0880  0.0787     0.5428        0.052
+ Joel.Eriksson.Ek        F  9228.033333     0.6451  0.4033 -0.0966     0.5397        0.110
+         Adam.Fox        D  9952.450000     0.5967  0.4948  0.0239     0.5396        0.133
+      Nick.Seeler        D  5545.433333     0.5657 -0.0053  0.0482     0.5233        0.003
+   Jared.Spurgeon        D 20613.400000     0.5669  0.3961 -0.0387     0.4948        0.102
+       Mark.Stone        F 13366.816667     0.5568  0.3105  0.1171     0.4942        0.145
+  William.Carrier        F  4850.083333     0.4908     NaN     NaN     0.4908        0.010
+Brendan.Gallagher        F 12870.433333     0.5313  0.1043 -0.0133     0.4704        0.139
+    Chris.Kreider        F 14927.916667     0.4918  0.4204  0.0356     0.4638        0.161
+  Gabriel.Vilardi        F  4333.050000     0.5497 -0.0099  0.0023     0.4575        0.161
+
+Top 20 (final pooled 5v5 BPR):
+      player_name position          toi  final_BPR_O  final_BPR_D  final_BPR    BPR   box_BPR  rapm_weight
+   Charlie.McAvoy        D 11808.950000       0.3362       0.6282     0.9644 0.9645  0.039037        1.000
+  Auston.Matthews        F 12491.533333       0.3388       0.5444     0.8832 0.8832  0.203356        1.000
+ Patrice.Bergeron        F 19541.733333       0.5146       0.3443     0.8589 0.8589  0.111340        1.000
+  Hampus.Lindholm        D 17019.866667       0.2889       0.5351     0.8240 0.8240 -0.029958        1.000
+      Jake.Walman        D  5030.183333       0.1776       0.5801     0.7577 0.7894  0.102240        0.954
+      Nick.Bonino        F 13511.733333       0.2138       0.5274     0.7412 0.7411  0.097633        1.000
+  Matthew.Tkachuk        F 11493.500000       0.4246       0.2712     0.6958 0.6958  0.064900        1.000
+     Noel.Acciari        F  7007.383333       0.2076       0.4376     0.6452 0.6491  0.088320        0.993
+ Joel.Eriksson.Ek        F  9228.033333       0.6138       0.0313     0.6451 0.6455  0.055844        0.999
+    Blake.Coleman        F  9946.233333       0.3902       0.2448     0.6350 0.6352  0.069833        1.000
+ MacKenzie.Weegar        D 11445.000000       0.1376       0.4902     0.6278 0.6278  0.080813        1.000
+   Connor.McDavid        F 15449.366667       0.5540       0.0678     0.6218 0.6218  0.048640        1.000
+         Adam.Fox        D  9952.450000       0.2327       0.3640     0.5967 0.5968  0.035567        1.000
+   Jared.Spurgeon        D 20613.400000       0.4377       0.1292     0.5669 0.5669  0.034793        1.000
+      Nick.Seeler        D  5545.433333       0.1613       0.4044     0.5657 0.5764  0.192786        0.972
+       Mark.Stone        F 13366.816667       0.1517       0.4051     0.5568 0.5568  0.057017        1.000
+  Gabriel.Vilardi        F  4333.050000       0.2899       0.2598     0.5497 0.6002  0.028233        0.912
+Brendan.Gallagher        F 12870.433333       0.1005       0.4308     0.5313 0.5312  0.115262        1.000
+  Alexander.Edler        D 21017.500000       0.3216       0.1985     0.5201 0.5201  0.087587        1.000
+ Alex.Pietrangelo        D 26457.200000       0.4396       0.0754     0.5150 0.5150  0.044841        1.000
+
+Per-season: 8,936 player-seasons → data/final_ratings_by_season.csv
+
+rapm_weight distribution (per-season):
+count    8936.000
+mean        0.524
+std         0.399
+min         0.029
+25%         0.049
+50%         0.606
+75%         0.940
+max         1.000
+
+Top 20 (total_BPR, 2022+ seasons):
+     player_name position  season         toi  final_BPR    PP_O    PK_D  total_BPR  pp_toi_frac
+  Charlie.McAvoy        D    2022 1494.300000     1.0967  0.0254  0.1310     0.8777        0.120
+Patrice.Bergeron        F    2023         NaN     0.8690  0.6780  0.0711     0.8690        0.000
+ Auston.Matthews        F    2022 1500.600000     0.9915  0.2530  0.0461     0.8532        0.184
+Patrice.Bergeron        F    2022 1356.550000     0.9407  0.6780  0.0711     0.8044        0.195
+  Connor.McDavid        F    2022 1835.616667     0.7950  0.9319  0.1789     0.7833        0.175
+  Charlie.McAvoy        D    2023 1838.600000     0.9552  0.0254  0.1310     0.7630        0.131
+ Auston.Matthews        F    2023 1698.283333     0.8991  0.2530  0.0461     0.7629        0.165
+     Nick.Bonino        F    2024         NaN     0.7472 -0.1714 -0.0181     0.7472        0.000
+ Hampus.Lindholm        D    2023 1699.950000     0.8678  0.0353  0.0709     0.7298        0.062
+  Charlie.McAvoy        D    2024 1183.516667     0.8995  0.0254  0.1310     0.7227        0.139
+ Auston.Matthews        F    2024 1371.633333     0.8734  0.2530  0.0461     0.7124        0.151
+  Connor.McDavid        F    2023 1623.300000     0.6329  0.9319  0.1789     0.6723        0.160
+ Hampus.Lindholm        D    2022 1854.950000     0.8230  0.0353  0.0709     0.6667        0.106
+     Jake.Walman        D    2023 1245.466667     0.7877 -0.0985 -0.0152     0.6577        0.034
+     Jake.Walman        D    2022 1242.266667     0.7803 -0.0985 -0.0152     0.6573        0.045
+ Matthew.Tkachuk        F    2023 1491.200000     0.7682  0.2489 -0.0092     0.6405        0.220
+  Connor.McDavid        F    2024 1476.100000     0.5790  0.9319  0.1789     0.6312        0.152
+ Matthew.Tkachuk        F    2022 1614.433333     0.7491  0.2489 -0.0092     0.6252        0.219
+     Jake.Walman        D    2024 1480.133333     0.7785 -0.0985 -0.0152     0.5953        0.108
+        Adam.Fox        D    2022 1998.966667     0.6638  0.4948  0.0239     0.5838        0.145
+[00:37:08] blend.py done.
+[00:37:08] ===== All steps complete. Outputs: =====
+[00:37:08]   data/rapm_results.csv
+[00:37:08]   data/rapm_by_season.csv
+[00:37:08]   data/box_score_ratings.csv
+[00:37:08]   data/pp_rapm.csv
+[00:37:08]   data/final_ratings.csv
+[00:37:08]   data/final_ratings_by_season.csv

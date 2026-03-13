@@ -1,0 +1,6 @@
+.venv/
+.claude/
+.Rproj.user/
+__pycache__/
+data/
+claude.md
