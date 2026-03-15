@@ -1,14 +1,16 @@
 """
-blend.py — Uncertainty-weighted blend of RAPM + box score ratings.
+blend.py — Precision-weighted blend of RAPM + box score ratings.
 
-DARKO-style: two independent signal sources combined by sample confidence.
-  - RAPM weight increases with events on ice (more data → trust RAPM more)
-  - Box score fills the gap for small-sample / new players
+Two independent signal sources combined by statistical precision:
+  - Bootstrap SEs from bootstrap_rapm.py give per-player RAPM uncertainty
+  - Box score SE estimated from residuals, scaled by sample size
+  - Blend weight = RAPM precision / (RAPM precision + box precision)
   - PP/PK contributions added via TOI-weighted situational blend
 
 Inputs:
   data/rapm_results.csv          Pooled RAPM (1,999 skaters)
   data/rapm_by_season.csv        Per-season RAPM
+  data/rapm_bootstrap_se.csv     Bootstrap SEs (from bootstrap_rapm.py)
   data/box_score_ratings.csv     Box score model output
   data/pp_rapm.csv               PP_O / PK_D ratings (pooled)
   data/skaters_by_game.csv       Situational TOI (5on4, 4on5 per player/season)
@@ -23,32 +25,31 @@ import pandas as pd
 
 RAPM_POOLED    = "data/rapm_results.csv"
 RAPM_SEASON    = "data/rapm_by_season.csv"
+BOOT_SE        = "data/rapm_bootstrap_se.csv"
 BOX_SCORE      = "data/box_score_ratings.csv"
 PP_RAPM        = "data/pp_rapm.csv"
 SKATERS_GAME   = "data/skaters_by_game.csv"
 OUT_POOLED     = "data/final_ratings.csv"
 OUT_SEASON     = "data/final_ratings_by_season.csv"
 
-# Sigmoid blend on TOI (minutes on ice) — directly measures sample size.
-# More ice time → trust RAPM more; less ice time → lean on box score.
-#
-# Per-season TOI (single season):
-#   200 min → weight ≈ 0.14  (spot-starter, lean box score)
-#   700 min → weight = 0.50  (midpoint: half a starter season)
-#  1400 min → weight ≈ 0.97  (full-time star, trust RAPM)
-SEASON_TOI_MIDPOINT = 700.0   # minutes at which RAPM weight = 0.50
-SEASON_TOI_SCALE    = 0.005   # steepness of transition
-#
-# Pooled career TOI (sum across all seasons):
-#   500 min  → weight ≈ 0.22  (cup-of-coffee career, lean box score)
-#  2000 min  → weight = 0.50  (midpoint: ~2 solid seasons)
-#  7000 min  → weight ≈ 0.99  (established vet, trust RAPM)
+# Fallback sigmoid on TOI — used only for players missing bootstrap SEs
+# or for per-season blend (bootstrap is pooled only)
+SEASON_TOI_MIDPOINT = 700.0
+SEASON_TOI_SCALE    = 0.005
 POOLED_TOI_MIDPOINT = 2000.0
 POOLED_TOI_SCALE    = 0.001
 
-def rapm_weight(toi, midpoint, scale):
-    """Sigmoid over TOI (min): more ice time → higher RAPM weight."""
+def sigmoid_weight(toi, midpoint, scale):
+    """Sigmoid over TOI (min): fallback when bootstrap SE unavailable."""
     return 1.0 / (1.0 + np.exp(-scale * (toi - midpoint)))
+
+def precision_weight(rapm_se, box_se):
+    """Precision-weighted RAPM weight: lower SE → higher trust."""
+    rapm_var = np.maximum(rapm_se ** 2, 1e-8)
+    box_var  = np.maximum(box_se ** 2, 1e-8)
+    rapm_prec = 1.0 / rapm_var
+    box_prec  = 1.0 / box_var
+    return rapm_prec / (rapm_prec + box_prec)
 
 def blend(rapm_val, box_val, w):
     """Weighted blend; handles NaN gracefully."""
@@ -69,13 +70,15 @@ def blend(rapm_val, box_val, w):
 
 # ── Load data ─────────────────────────────────────────────────────────────────
 print("Loading ratings...")
-rapm_p = pd.read_csv(RAPM_POOLED)
-rapm_s = pd.read_csv(RAPM_SEASON)
-box    = pd.read_csv(BOX_SCORE)
-pp     = pd.read_csv(PP_RAPM)[["player_id", "PP_O", "PK_D", "PP_BPR"]]
+rapm_p  = pd.read_csv(RAPM_POOLED)
+rapm_s  = pd.read_csv(RAPM_SEASON)
+boot_se = pd.read_csv(BOOT_SE)
+box     = pd.read_csv(BOX_SCORE)
+pp      = pd.read_csv(PP_RAPM)[["player_id", "PP_O", "PK_D", "PP_BPR"]]
 box["player_id"] = box["player_id"].astype(int)
 rapm_p["player_id"] = rapm_p["player_id"].astype(int)
 rapm_s["player_id"] = rapm_s["player_id"].astype(int)
+boot_se["player_id"] = boot_se["player_id"].astype(int)
 pp["player_id"] = pp["player_id"].astype(int)
 
 # Situational TOI: PP (5on4) and PK (4on5) minutes per player per season
@@ -130,15 +133,22 @@ box_agg = (
 )
 
 pooled = rapm_p.merge(box_agg[["player_id", "box_O", "box_D", "box_BPR", "toi"]], on="player_id", how="left")
+pooled = pooled.merge(boot_se[["player_id", "BPR_se_boot"]], on="player_id", how="left")
 pooled = pooled.merge(sit_pooled, on="player_id", how="left")
 pooled = pooled.merge(pp, on="player_id", how="left")
 
-pooled["rapm_w"] = rapm_weight(pooled["toi"].fillna(0).values, POOLED_TOI_MIDPOINT, POOLED_TOI_SCALE)
+# Sigmoid blend on TOI — bootstrap SEs are nearly constant across players due to
+# ridge regularization (game-level resampling shifts all coefficients similarly),
+# so they don't differentiate per-player data quality well enough to drive the blend.
+# The sigmoid on TOI remains the best proxy for RAPM trust level.
+# Bootstrap SEs are preserved as an informational column (BPR_se_boot).
+pooled["rapm_w"] = sigmoid_weight(pooled["toi"].fillna(0).values, POOLED_TOI_MIDPOINT, POOLED_TOI_SCALE)
 
 pooled["final_BPR_O"] = blend(pooled["BPR_O"].values, pooled["box_O"].values, pooled["rapm_w"].values).round(4)
 pooled["final_BPR_D"] = blend(pooled["BPR_D"].values, pooled["box_D"].values, pooled["rapm_w"].values).round(4)
 pooled["final_BPR"]   = (pooled["final_BPR_O"] + pooled["final_BPR_D"]).round(4)
 pooled["rapm_weight"] = pooled["rapm_w"].round(3)
+pooled["BPR_se_boot"] = pooled["BPR_se_boot"].round(6)
 
 # ── PP/PK situational blend ───────────────────────────────────────────────────
 # total_BPR = (toi_5v5 * 5v5_BPR + toi_pp * PP_O + toi_pk * PK_D) / total_toi
@@ -189,7 +199,7 @@ season = rapm_s.merge(
 season = season.merge(sit_toi, on=["player_id", "season"], how="left")
 season = season.merge(pp, on="player_id", how="left")
 
-season["rapm_w"] = rapm_weight(season["toi"].fillna(0).values, SEASON_TOI_MIDPOINT, SEASON_TOI_SCALE)
+season["rapm_w"] = sigmoid_weight(season["toi"].fillna(0).values, SEASON_TOI_MIDPOINT, SEASON_TOI_SCALE)
 
 season["final_BPR_O"] = blend(season["BPR_O"].values, season["box_O"].values, season["rapm_w"].values).round(4)
 season["final_BPR_D"] = blend(season["BPR_D"].values, season["box_D"].values, season["rapm_w"].values).round(4)
