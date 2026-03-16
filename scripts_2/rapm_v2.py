@@ -127,6 +127,16 @@ for col in ("home_goalie_id", "away_goalie_id"):
     goalie_ids.update(df[col].dropna().astype(int).unique())
 print(f"  {len(goalie_ids)} unique goalies in 5v5 data", file=sys.stderr)
 
+# Goalie name lookup from raw_pbp
+_raw_g = pd.read_csv(
+    "data/raw_pbp.csv",
+    usecols=["event_goalie_name", "event_goalie_id"],
+)
+_raw_g = _raw_g.dropna().drop_duplicates()
+_raw_g["event_goalie_id"] = _raw_g["event_goalie_id"].astype(int)
+goalie_names = dict(zip(_raw_g["event_goalie_id"], _raw_g["event_goalie_name"]))
+del _raw_g
+
 # ── Helpers ──────────────────────────────────────────────────────────────────
 def parse_ids(s):
     if pd.isna(s):
@@ -270,11 +280,13 @@ def build_design_matrix(frame, skater_ids, skater_idx, goalie_list, goalie_idx,
 
 # ── Fitting functions ────────────────────────────────────────────────────────
 
-def fit_rapm_raw(frame, X, skater_ids, n_goalies, sample_weight=None):
-    """Standard RidgeCV fit (no prior). Returns results dict, coefs dict, and per-metric alphas."""
-    results   = {pid: {} for pid in skater_ids}
-    all_coefs = {}
-    alphas    = {}
+def fit_rapm_raw(frame, X, skater_ids, goalie_list_arg, sample_weight=None):
+    """Standard RidgeCV fit (no prior). Returns results dict, coefs dict, alphas, and goalie results."""
+    results        = {pid: {} for pid in skater_ids}
+    goalie_results = {gid: {} for gid in goalie_list_arg}
+    all_coefs      = {}
+    alphas         = {}
+    goalie_offset  = len(skater_ids) * 2
 
     for metric_name, y_col in METRICS.items():
         y = frame[y_col].fillna(0).astype(float).values
@@ -297,6 +309,11 @@ def fit_rapm_raw(frame, X, skater_ids, n_goalies, sample_weight=None):
             results[pid][f"{metric_name}_D"]   = round(d, 4)
             results[pid][f"{metric_name}_net"] = round(o - d, 4)
 
+        # Extract goalie coefficients
+        for gi, gid in enumerate(goalie_list_arg):
+            g_coef = float(coefs[goalie_offset + gi]) * scale
+            goalie_results[gid][f"{metric_name}_G"] = round(g_coef, 4)
+
     # BPR composite
     for pid in skater_ids:
         r = results[pid]
@@ -306,15 +323,17 @@ def fit_rapm_raw(frame, X, skater_ids, n_goalies, sample_weight=None):
         r["BPR_D"] = round(bpr_d, 4)
         r["BPR"]   = round(bpr_o + bpr_d, 4)
 
-    return results, all_coefs, alphas
+    return results, all_coefs, alphas, goalie_results
 
 
-def fit_rapm_prior(frame, X, skater_ids, n_goalies, prior_lookup, calibration,
+def fit_rapm_prior(frame, X, skater_ids, goalie_list_arg, prior_lookup, calibration,
                    sample_weight=None, raw_alphas=None):
     """Prior-informed ridge fit. Uses raw RAPM alphas with prior mean shift."""
-    results   = {pid: {} for pid in skater_ids}
-    all_coefs = {}
-    n_cols    = X.shape[1]
+    results        = {pid: {} for pid in skater_ids}
+    goalie_results = {gid: {} for gid in goalie_list_arg}
+    all_coefs      = {}
+    n_cols         = X.shape[1]
+    goalie_offset  = len(skater_ids) * 2
 
     cal_O = calibration["offense"]
     cal_D = calibration["defense"]
@@ -390,6 +409,11 @@ def fit_rapm_prior(frame, X, skater_ids, n_goalies, prior_lookup, calibration,
             results[pid][f"{metric_name}_O_se"] = round(o_se, 4)
             results[pid][f"{metric_name}_D_se"] = round(d_se, 4)
 
+        # Extract goalie coefficients
+        for gi, gid in enumerate(goalie_list_arg):
+            g_coef = float(coefs[goalie_offset + gi]) * scale
+            goalie_results[gid][f"{metric_name}_G"] = round(g_coef, 4)
+
     # BPR composite + propagated uncertainty
     for pid in skater_ids:
         r = results[pid]
@@ -406,7 +430,7 @@ def fit_rapm_prior(frame, X, skater_ids, n_goalies, prior_lookup, calibration,
             r["BPR_D_se"] = round(bpr_d_se, 4)
             r["BPR_se"]   = round(np.sqrt(bpr_o_se**2 + bpr_d_se**2), 4)
 
-    return results, all_coefs
+    return results, all_coefs, goalie_results
 
 
 def results_to_df(results, season=None):
@@ -436,14 +460,23 @@ print(f"  Matrix: {X.shape[0]:,} × {X.shape[1]:,}, {X.nnz:,} nnz", file=sys.std
 # ── Fit model ────────────────────────────────────────────────────────────────
 if MODE == "raw":
     print("\n── Pooled raw RAPM (no prior) ──────────────", file=sys.stderr)
-    results, all_coefs, raw_alphas = fit_rapm_raw(df, X, skater_ids, len(goalie_list),
-                                                    sample_weight=sample_weight)
+    results, all_coefs, raw_alphas, g_results = fit_rapm_raw(
+        df, X, skater_ids, goalie_list, sample_weight=sample_weight,
+    )
     out_df = results_to_df(results)
 
     # Save raw alphas for prior mode to use
     with open("data/v2_raw_alphas.json", "w") as f:
         json.dump(raw_alphas, f, indent=2)
     print(f"  Saved per-metric alphas: {raw_alphas}", file=sys.stderr)
+
+    # Save goalie RAPM
+    g_df = pd.DataFrame.from_dict(g_results, orient="index")
+    g_df.index.name = "goalie_id"
+    g_df = g_df.reset_index()
+    g_df["goalie_name"] = g_df["goalie_id"].map(goalie_names).fillna("?")
+    g_df.to_csv("data/v2_goalie_rapm.csv", index=False)
+    print(f"  Saved {len(g_df)} goalie coefficients to data/v2_goalie_rapm.csv", file=sys.stderr)
 
     out_df.to_csv("data/v2_rapm_raw.csv", index=False)
     print(f"\nWrote {len(out_df):,} skaters to data/v2_rapm_raw.csv", file=sys.stderr)
@@ -482,13 +515,21 @@ elif MODE == "prior":
 
     # ── Pooled fit ───────────────────────────────────────────────────────────
     print("\n── Pooled prior-informed RAPM ──────────────", file=sys.stderr)
-    results, all_coefs = fit_rapm_prior(
-        df, X, skater_ids, len(goalie_list),
+    results, all_coefs, g_results = fit_rapm_prior(
+        df, X, skater_ids, goalie_list,
         prior_lookup, calibration,
         sample_weight=sample_weight,
         raw_alphas=raw_alphas,
     )
     out_df = results_to_df(results)
+
+    # Save goalie RAPM
+    g_df = pd.DataFrame.from_dict(g_results, orient="index")
+    g_df.index.name = "goalie_id"
+    g_df = g_df.reset_index()
+    g_df["goalie_name"] = g_df["goalie_id"].map(goalie_names).fillna("?")
+    g_df.to_csv("data/v2_goalie_rapm.csv", index=False)
+    print(f"  Saved {len(g_df)} goalie coefficients to data/v2_goalie_rapm.csv", file=sys.stderr)
 
     # Add prior columns for diagnostics
     out_df["prior_O"] = out_df["player_id"].map(lambda p: prior_lookup.get(p, (0, 0))[0]).round(4)
@@ -539,8 +580,8 @@ elif MODE == "prior":
             elif pid in prior_lookup:
                 s_prior_lookup[pid] = prior_lookup[pid]
 
-        s_results, _ = fit_rapm_prior(
-            sf, sX, s_skaters, len(s_goalies),
+        s_results, _, _ = fit_rapm_prior(
+            sf, sX, s_skaters, s_goalies,
             s_prior_lookup, calibration,
             raw_alphas=raw_alphas,
         )

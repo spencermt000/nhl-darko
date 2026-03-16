@@ -32,9 +32,6 @@ SKATERS_GAME = "data/skaters_by_game.csv"
 OUT_POOLED   = "data/v2_final_ratings.csv"
 OUT_SEASON   = "data/v2_final_ratings_by_season.csv"
 
-# Replacement level for GAR (roughly 20th percentile BPR)
-REPLACEMENT_LEVEL = -0.10
-
 # ── Load data ──────────────────────────────────────────────────────────────
 print("Loading v2 RAPM results...", file=sys.stderr)
 rapm_p = pd.read_csv(RAPM_POOLED)
@@ -133,18 +130,13 @@ pooled["total_BPR_adj"] = np.where(
     bpr5,
 )
 
-# GAR: Goals Above Replacement
-# Pooled TOI (sum of 5v5 TOI across seasons, approximate)
-pooled_toi = pooled["toi_5v5"].fillna(0).values
-pooled["GAR"] = ((pooled["total_BPR_adj"] - REPLACEMENT_LEVEL) * pooled_toi / 60).round(1)
-
 # ── Save pooled ───────────────────────────────────────────────────────────
 pooled.to_csv(OUT_POOLED, index=False)
 print(f"\nPooled: {len(pooled):,} players → {OUT_POOLED}", file=sys.stderr)
 
 print("\nTop 20 (total_BPR_adj — deployment-neutral):", file=sys.stderr)
 cols_show = ["player_name", "position", "BPR_O", "BPR_D", "BPR", "BPR_se",
-             "PP_O", "PK_D", "total_BPR_adj", "GAR", "rapm_weight"]
+             "PP_O", "PK_D", "total_BPR_adj", "rapm_weight"]
 cols_show = [c for c in cols_show if c in pooled.columns]
 print(pooled.sort_values("total_BPR_adj", ascending=False).head(20)[cols_show].to_string(index=False),
       file=sys.stderr)
@@ -186,10 +178,6 @@ season["total_BPR_adj"] = np.where(
     bpr5s,
 )
 
-# Per-season GAR
-season_toi = season["toi_5v5"].fillna(0).values
-season["GAR"] = ((season["total_BPR_adj"] - REPLACEMENT_LEVEL) * season_toi / 60).round(1)
-
 # ── Save per-season ───────────────────────────────────────────────────────
 season.to_csv(OUT_SEASON, index=False)
 print(f"\nPer-season: {len(season):,} player-seasons → {OUT_SEASON}", file=sys.stderr)
@@ -197,6 +185,6 @@ print(f"\nPer-season: {len(season):,} player-seasons → {OUT_SEASON}", file=sys
 print("\nTop 20 (total_BPR_adj, 2022+ seasons):", file=sys.stderr)
 recent = season[season["season"] >= 2022].sort_values("total_BPR_adj", ascending=False)
 cols_season = ["player_name", "position", "season", "BPR", "BPR_se",
-               "PP_O", "PK_D", "total_BPR_adj", "GAR"]
+               "PP_O", "PK_D", "total_BPR_adj"]
 cols_season = [c for c in cols_season if c in season.columns]
 print(recent.head(20)[cols_season].to_string(index=False), file=sys.stderr)

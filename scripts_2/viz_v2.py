@@ -6,6 +6,7 @@ Same as v1 viz.py plus:
   - Uncertainty funnel (x=TOI, y=BPR with error bars from posterior SE)
 """
 
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
@@ -261,5 +262,227 @@ if PP_FILE.exists():
     fig_pp.update_layout(width=1000, height=750, plot_bgcolor="white", paper_bgcolor="white")
     fig_pp.write_html(str(OUT_DIR / "pp_pk_scatter.html"))
     print(f"PP/PK scatter saved")
+
+# ── 7. GAR component stacked bar chart (top 20 WAR) ──────────────────────────
+GAR_POOLED = Path("data/v2_gar_pooled.csv")
+if GAR_POOLED.exists():
+    gar = pd.read_csv(GAR_POOLED)
+    gar["display_name"] = gar["player_name"].str.replace(".", " ", regex=False)
+
+    top20 = gar.sort_values("WAR", ascending=False).head(20).copy()
+    top20 = top20.sort_values("WAR", ascending=True)  # bottom-to-top for horizontal bars
+
+    comp_cols = ["xEV_O_GAR", "xEV_D_GAR", "FINISH_O_GAR", "FINISH_D_GAR",
+                 "PP_GAR", "PK_GAR", "PEN_GAR", "FO_GAR"]
+    comp_labels = ["xEV Offense", "xEV Defense", "Finishing (O)", "Finishing (D)",
+                   "Power Play", "Penalty Kill", "Penalties", "Faceoffs"]
+    comp_colors = ["#2196F3", "#1565C0", "#4CAF50", "#2E7D32",
+                   "#FF9800", "#F57C00", "#9C27B0", "#607D8B"]
+
+    fig, ax = plt.subplots(figsize=(13, 9))
+    y_pos = range(len(top20))
+    left_pos = np.zeros(len(top20))
+    left_neg = np.zeros(len(top20))
+
+    for col, label, color in zip(comp_cols, comp_labels, comp_colors):
+        if col not in top20.columns:
+            continue
+        vals = top20[col].fillna(0).values
+        pos_vals = np.where(vals > 0, vals, 0)
+        neg_vals = np.where(vals < 0, vals, 0)
+
+        if pos_vals.sum() > 0:
+            ax.barh(y_pos, pos_vals, left=left_pos, height=0.7,
+                    color=color, label=label, edgecolor="white", linewidth=0.3)
+            left_pos += pos_vals
+        if neg_vals.sum() < 0:
+            ax.barh(y_pos, neg_vals, left=left_neg, height=0.7,
+                    color=color, edgecolor="white", linewidth=0.3, alpha=0.6)
+            left_neg += neg_vals
+
+    # WAR labels on right
+    for i, (_, row) in enumerate(top20.iterrows()):
+        ax.text(left_pos[i] + 0.3, i, f"{row['WAR']:.1f} WAR",
+                va="center", fontsize=9, fontweight="bold")
+
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(top20["display_name"], fontsize=10)
+    ax.axvline(0, color="black", linewidth=0.5)
+    ax.set_xlabel("Goals Above Replacement (GAR)", fontsize=12)
+    ax.set_title("Top 20 Skaters — Component-Level GAR Breakdown (Pooled Career)",
+                 fontsize=14, fontweight="bold")
+    ax.legend(loc="lower right", fontsize=9, ncol=2)
+    ax.grid(axis="x", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(OUT_DIR / "gar_components_top20.png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print("GAR component chart saved")
+
+
+# ── 8. xGAR vs GAR scatter ──────────────────────────────────────────────────
+    if "xGAR" in gar.columns:
+        qualified = gar[gar["toi_5v5"] >= 200].copy()
+        qualified["display_name"] = qualified["player_name"].str.replace(".", " ", regex=False)
+
+        fig_xgar = px.scatter(
+            qualified,
+            x="xGAR", y="GAR",
+            color="position",
+            hover_name="display_name",
+            hover_data={"xGAR": ":.1f", "GAR": ":.1f", "WAR": ":.1f",
+                        "FINISH_O_GAR": ":.1f", "position": True},
+            color_discrete_map={"F": "#2196F3", "D": "#FF5722"},
+            opacity=0.6,
+            title="xGAR vs GAR — Finishing Talent (deviation from diagonal)",
+            labels={"xGAR": "Expected GAR (no finishing)", "GAR": "GAR (with finishing)"},
+        )
+        gar_range = [min(qualified["xGAR"].min(), qualified["GAR"].min()),
+                     max(qualified["xGAR"].max(), qualified["GAR"].max())]
+        fig_xgar.add_shape(type="line", x0=gar_range[0], y0=gar_range[0],
+                           x1=gar_range[1], y1=gar_range[1],
+                           line=dict(dash="dash", color="gray", width=1))
+        fig_xgar.update_layout(width=900, height=700, plot_bgcolor="white", paper_bgcolor="white")
+        fig_xgar.update_xaxes(showgrid=True, gridcolor="#eeeeee")
+        fig_xgar.update_yaxes(showgrid=True, gridcolor="#eeeeee")
+        fig_xgar.write_html(str(OUT_DIR / "xgar_vs_gar.html"))
+        print("xGAR vs GAR scatter saved")
+
+
+# ── 9. WAR leaderboard table (top 20) ────────────────────────────────────────
+    top20_tbl = gar.sort_values("WAR", ascending=False).head(20).reset_index(drop=True)
+    fig, ax = plt.subplots(figsize=(14, 6))
+    ax.axis("off")
+
+    header = ["Rank", "Player", "Pos", "EV_O", "EV_D", "PP", "PK", "PEN", "FO", "GAR", "WAR"]
+    rows = []
+    for i, row in top20_tbl.iterrows():
+        rows.append([
+            i + 1,
+            row["display_name"],
+            row["position"],
+            f"{row.get('EV_O_GAR', 0):+.1f}",
+            f"{row.get('EV_D_GAR', 0):+.1f}",
+            f"{row.get('PP_GAR', 0):+.1f}",
+            f"{row.get('PK_GAR', 0):+.1f}",
+            f"{row.get('PEN_GAR', 0):+.1f}",
+            f"{row.get('FO_GAR', 0):+.1f}",
+            f"{row['GAR']:+.1f}",
+            f"{row['WAR']:.1f}",
+        ])
+
+    tbl = ax.table(cellText=rows, colLabels=header, cellLoc="center", loc="center")
+    tbl.auto_set_font_size(False)
+    tbl.set_fontsize(9)
+    tbl.scale(1, 1.5)
+    for j in range(len(header)):
+        tbl[0, j].set_facecolor("#1a1a2e")
+        tbl[0, j].set_text_props(color="white", fontweight="bold")
+    for i in range(1, 21):
+        color = "#f0f4ff" if i % 2 == 0 else "white"
+        for j in range(len(header)):
+            tbl[i, j].set_facecolor(color)
+
+    ax.set_title("Top 20 Skaters — Component GAR / WAR (Pooled Career)",
+                 fontsize=13, fontweight="bold", pad=12)
+    fig.tight_layout()
+    fig.savefig(OUT_DIR / "war_leaderboard.png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print("WAR leaderboard table saved")
+
+
+# ── 9b. Single-season WAR leaderboard (most recent complete season) ──────────
+GAR_SEASON = Path("data/v2_gar_by_season.csv")
+if GAR_SEASON.exists():
+    gar_s = pd.read_csv(GAR_SEASON)
+    gar_s["display_name"] = gar_s["player_name"].str.replace(".", " ", regex=False)
+
+    # Most recent complete season: largest season with a reasonable player count
+    season_counts = gar_s.groupby("season").size()
+    # The current (partial) season has fewer players; pick the second-latest if latest is small
+    all_seasons = sorted(season_counts.index)
+    if len(all_seasons) >= 2 and season_counts[all_seasons[-1]] < 0.8 * season_counts[all_seasons[-2]]:
+        latest_full = all_seasons[-2]
+    else:
+        latest_full = all_seasons[-1]
+
+    nhl_season_str = f"{latest_full}-{str(latest_full + 1)[-2:]}"
+    ssn = gar_s[gar_s["season"] == latest_full].sort_values("WAR", ascending=False)
+    top20_ssn = ssn.head(20).reset_index(drop=True)
+
+    fig, ax = plt.subplots(figsize=(14, 6))
+    ax.axis("off")
+
+    header = ["Rank", "Player", "Pos", "EV_O", "EV_D", "PP", "PK", "PEN", "FO", "GAR", "WAR"]
+    rows = []
+    for i, row in top20_ssn.iterrows():
+        rows.append([
+            i + 1,
+            row["display_name"],
+            row["position"],
+            f"{row.get('EV_O_GAR', 0):+.1f}",
+            f"{row.get('EV_D_GAR', 0):+.1f}",
+            f"{row.get('PP_GAR', 0):+.1f}",
+            f"{row.get('PK_GAR', 0):+.1f}",
+            f"{row.get('PEN_GAR', 0):+.1f}",
+            f"{row.get('FO_GAR', 0):+.1f}",
+            f"{row['GAR']:+.1f}",
+            f"{row['WAR']:.1f}",
+        ])
+
+    tbl = ax.table(cellText=rows, colLabels=header, cellLoc="center", loc="center")
+    tbl.auto_set_font_size(False)
+    tbl.set_fontsize(9)
+    tbl.scale(1, 1.5)
+    for j in range(len(header)):
+        tbl[0, j].set_facecolor("#1a1a2e")
+        tbl[0, j].set_text_props(color="white", fontweight="bold")
+    for i in range(1, 21):
+        color = "#f0f4ff" if i % 2 == 0 else "white"
+        for j in range(len(header)):
+            tbl[i, j].set_facecolor(color)
+
+    ax.set_title(f"Top 20 Skaters — Component GAR / WAR ({nhl_season_str})",
+                 fontsize=13, fontweight="bold", pad=12)
+    fig.tight_layout()
+    fig.savefig(OUT_DIR / f"war_leaderboard_{latest_full}.png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"WAR leaderboard ({nhl_season_str}) saved")
+
+
+# ── 10. Goalie WAR leaderboard ───────────────────────────────────────────────
+GOALIE_WAR_FILE = Path("data/v2_goalie_war.csv")
+if GOALIE_WAR_FILE.exists():
+    gwar = pd.read_csv(GOALIE_WAR_FILE)
+    top15g = gwar.sort_values("GOALIE_GAR_per60", ascending=False).head(15).reset_index(drop=True)
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+    ax.axis("off")
+    header = ["Rank", "Goalie", "Rate", "GAR/60", "WAR/60"]
+    rows = []
+    for i, row in top15g.iterrows():
+        rows.append([
+            i + 1,
+            row["goalie_name"],
+            f"{row['goalie_rate']:+.4f}",
+            f"{row['GOALIE_GAR_per60']:+.4f}",
+            f"{row['GOALIE_WAR_per60']:+.4f}",
+        ])
+    tbl = ax.table(cellText=rows, colLabels=header, cellLoc="center", loc="center")
+    tbl.auto_set_font_size(False)
+    tbl.set_fontsize(10)
+    tbl.scale(1, 1.5)
+    for j in range(len(header)):
+        tbl[0, j].set_facecolor("#1a1a2e")
+        tbl[0, j].set_text_props(color="white", fontweight="bold")
+    for i in range(1, 16):
+        color = "#f0f4ff" if i % 2 == 0 else "white"
+        for j in range(len(header)):
+            tbl[i, j].set_facecolor(color)
+    ax.set_title("Top 15 Goalies — RAPM-Based WAR Rate (Pooled)",
+                 fontsize=13, fontweight="bold", pad=12)
+    fig.tight_layout()
+    fig.savefig(OUT_DIR / "goalie_war_leaderboard.png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print("Goalie WAR leaderboard saved")
 
 print("\nAll visualizations written to viz_output_v2/")
