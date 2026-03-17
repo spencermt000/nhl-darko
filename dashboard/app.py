@@ -37,6 +37,14 @@ composite_war = pd.read_csv("data/v5_season_war.csv")
 # Rolling RAPM (latest window per player)
 rapm_latest = pd.read_csv("data/v3_rolling_rapm_latest.csv")
 
+# Team ratings
+team_season = pd.read_csv("data/v6_team_season_ratings.csv")
+team_games = pd.read_csv("data/v6_team_game_ratings.csv")
+team_games["game_date"] = pd.to_datetime(team_games["game_date"])
+TEAM_SEASONS = sorted(team_season["season"].unique())
+TEAM_LATEST = max(TEAM_SEASONS)
+ALL_TEAMS = sorted(team_season["team"].unique())
+
 # All seasons available
 ALL_SEASONS = sorted(set(daily_war["season"].unique()) | set(composite_war["season"].unique()))
 LATEST_SEASON = max(ALL_SEASONS)
@@ -365,6 +373,50 @@ app.layout = html.Div(style={"fontFamily": "system-ui, -apple-system, sans-serif
                 ]),
 
                 dcc.Graph(id="mx-scatter", style={"height": "600px"}),
+            ]),
+        ]),
+
+        # ══════════════════════════════════════════════════════════════════════
+        # TAB 5: TEAM RATINGS
+        # ══════════════════════════════════════════════════════════════════════
+        dcc.Tab(label="Team Ratings", value="teams", children=[
+            html.Div(style={"padding": "20px"}, children=[
+
+                html.P("Team-level ratings aggregated from player metrics. "
+                       "Compare roster strength, model predictions, and actual results.",
+                       style={"color": "#666", "marginBottom": "15px"}),
+
+                html.Div(style={"display": "flex", "gap": "15px", "marginBottom": "15px",
+                                "flexWrap": "wrap", "alignItems": "center"}, children=[
+                    _dropdown("Season", "tm-season",
+                              [{"label": season_label(s), "value": s} for s in TEAM_SEASONS],
+                              TEAM_LATEST, "130px"),
+                    _dropdown("Sort By", "tm-sort", [
+                        {"label": "Win %", "value": "win_pct"},
+                        {"label": "Goal Diff", "value": "actual_GD"},
+                        {"label": "Team Strength", "value": "team_strength"},
+                        {"label": "Roster EV_O", "value": "roster_EV_O"},
+                        {"label": "Roster EV_D", "value": "roster_EV_D"},
+                        {"label": "Goalie", "value": "goalie_GA_G"},
+                    ], "win_pct", "180px"),
+                    _dropdown("View", "tm-view", [
+                        {"label": "Strength Breakdown", "value": "breakdown"},
+                        {"label": "Predicted vs Actual", "value": "pred_vs_actual"},
+                        {"label": "Season Trajectory", "value": "trajectory"},
+                    ], "breakdown", "200px"),
+                ]),
+
+                dcc.Graph(id="tm-chart", style={"height": "700px"}),
+                html.Div(id="tm-table-container", style={"marginTop": "10px"}),
+
+                # Team game-level detail
+                html.Div(style={"display": "flex", "gap": "15px", "marginTop": "25px",
+                                "marginBottom": "10px", "alignItems": "center"}, children=[
+                    _dropdown("Team Detail", "tm-team",
+                              [{"label": t, "value": t} for t in ALL_TEAMS],
+                              ALL_TEAMS[0], "130px"),
+                ]),
+                dcc.Graph(id="tm-game-chart", style={"height": "400px"}),
             ]),
         ]),
     ]),
@@ -780,6 +832,196 @@ def update_scatter(season, x_col, y_col, color_col, pos, min_gp):
         margin=dict(t=60, b=40),
     )
     _style_fig(fig)
+
+    return fig
+
+
+# ── TEAM RATINGS ─────────────────────────────────────────────────────────────
+
+@app.callback(
+    [Output("tm-chart", "figure"),
+     Output("tm-table-container", "children")],
+    [Input("tm-season", "value"), Input("tm-sort", "value"), Input("tm-view", "value")],
+)
+def update_team_ratings(season, sort_col, view):
+    df = team_season[team_season["season"] == season].copy()
+    df = df.sort_values(sort_col, ascending=False).reset_index(drop=True)
+    df["rank"] = df.index + 1
+    slabel = season_label(season)
+
+    if view == "breakdown":
+        fig = go.Figure()
+        comps = [
+            ("roster_EV_O", "EV Offense", COLORS["EV_O"]),
+            ("roster_EV_D", "EV Defense", COLORS["EV_D"]),
+            ("roster_PP", "Power Play", COLORS["PP"]),
+            ("roster_PK", "Penalty Kill", COLORS["PK"]),
+            ("roster_PEN", "Penalties", COLORS["PEN"]),
+        ]
+        for col, label, color in comps:
+            if col in df.columns:
+                fig.add_trace(go.Bar(
+                    y=df["team"], x=df[col], name=label, orientation="h",
+                    marker_color=color, opacity=0.8,
+                    hovertemplate="%{y}: %{x:.4f}<extra>" + label + "</extra>",
+                ))
+        fig.update_layout(
+            barmode="relative",
+            yaxis=dict(autorange="reversed", tickfont=dict(size=12)),
+            xaxis_title="Roster Strength Component",
+            title=f"Team Strength Breakdown — {slabel} (sorted by {sort_col})",
+            margin=dict(l=80, r=20, t=60, b=40),
+        )
+
+    elif view == "pred_vs_actual":
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=df["team_strength"], y=df["win_pct"], mode="markers+text",
+            marker=dict(size=12, color=df["actual_GD"], colorscale="RdYlBu",
+                        colorbar=dict(title="Goal Diff"), line=dict(width=1, color="gray")),
+            text=df["team"], textposition="top center", textfont=dict(size=10),
+            hovertemplate="%{text}<br>Strength: %{x:.3f}<br>Win%%: %{y:.3f}<br>"
+                          "GD: %{marker.color:+d}<extra></extra>",
+        ))
+        # Add trend line
+        from numpy.polynomial.polynomial import polyfit
+        if len(df) > 2:
+            b, m = polyfit(df["team_strength"], df["win_pct"], 1)
+            x_range = np.linspace(df["team_strength"].min(), df["team_strength"].max(), 50)
+            fig.add_trace(go.Scatter(x=x_range, y=b + m * x_range, mode="lines",
+                                     line=dict(color="gray", dash="dash", width=1),
+                                     showlegend=False))
+        corr = df[["team_strength", "win_pct"]].corr().iloc[0, 1]
+        fig.update_layout(
+            xaxis_title="Roster Aggregate Strength",
+            yaxis_title="Actual Win %",
+            title=f"Team Strength vs Actual Win% — {slabel} (r={corr:.3f})",
+            margin=dict(t=60, b=40),
+        )
+
+    else:  # trajectory
+        # Rolling win% from game-level data
+        gdf = team_games[team_games["season"] == season].copy()
+        fig = go.Figure()
+        teams_sorted = df["team"].tolist()
+        top_teams = teams_sorted[:5]
+        bottom_teams = teams_sorted[-3:]
+        highlight = set(top_teams + bottom_teams)
+
+        for team in teams_sorted:
+            tg = gdf[(gdf["home_team"] == team) | (gdf["away_team"] == team)].sort_values("game_date")
+            wins = []
+            for _, row in tg.iterrows():
+                if row["home_team"] == team:
+                    wins.append(1 if row["home_win"] == 1 else 0)
+                else:
+                    wins.append(1 if row["home_win"] == 0 else 0)
+            if not wins:
+                continue
+            cum_wins = np.cumsum(wins)
+            gp_range = np.arange(1, len(wins) + 1)
+            rolling_pct = cum_wins / gp_range
+
+            show = team in highlight
+            fig.add_trace(go.Scatter(
+                x=gp_range, y=rolling_pct, name=team, mode="lines",
+                line=dict(width=2.5 if show else 1, color=None if show else "lightgray"),
+                opacity=1.0 if show else 0.3,
+                showlegend=show,
+            ))
+
+        fig.update_layout(
+            xaxis_title="Games Played", yaxis_title="Cumulative Win %",
+            title=f"Season Win% Trajectory — {slabel} (top 5 / bottom 3 highlighted)",
+            margin=dict(t=60, b=40),
+        )
+        fig.add_hline(y=0.5, line_dash="dash", line_color="gray", opacity=0.5)
+
+    _style_fig(fig)
+
+    # Table
+    table_cols = ["rank", "team", "GP", "actual_wins", "win_pct", "actual_GD",
+                  "team_strength", "roster_EV_O", "roster_EV_D", "roster_PP",
+                  "roster_PK", "roster_PEN", "goalie_GA_G"]
+    table_cols = [c for c in table_cols if c in df.columns]
+    table = dash_table.DataTable(
+        data=df[table_cols].round(4).to_dict("records"),
+        columns=[{"name": c, "id": c} for c in table_cols],
+        sort_action="native", filter_action="native",
+        style_table={"overflowX": "auto"},
+        style_cell={"textAlign": "center", "padding": "4px", "fontSize": "11px"},
+        style_header={"fontWeight": "bold", "backgroundColor": "#f0f0f0"},
+        style_data_conditional=[{"if": {"row_index": "odd"}, "backgroundColor": "#f9f9f9"}],
+        page_size=32,
+    )
+
+    return fig, table
+
+
+@app.callback(
+    Output("tm-game-chart", "figure"),
+    [Input("tm-team", "value"), Input("tm-season", "value")],
+)
+def update_team_game_detail(team, season):
+    gdf = team_games[team_games["season"] == season].copy()
+    tg = gdf[(gdf["home_team"] == team) | (gdf["away_team"] == team)].sort_values("game_date")
+
+    if len(tg) == 0:
+        return _empty_fig(f"No game data for {team}")
+
+    # Build per-game series
+    dates, gds, pred_gds, wins = [], [], [], []
+    for _, row in tg.iterrows():
+        dates.append(row["game_date"])
+        if row["home_team"] == team:
+            gds.append(row["goal_diff"])
+            pred_gds.append(row["pred_gd_xgb"])
+            wins.append(1 if row["home_win"] == 1 else 0)
+        else:
+            gds.append(-row["goal_diff"])
+            pred_gds.append(-row["pred_gd_xgb"])
+            wins.append(1 if row["home_win"] == 0 else 0)
+
+    cum_gd = np.cumsum(gds)
+    cum_wins = np.cumsum(wins)
+    gp = np.arange(1, len(wins) + 1)
+
+    fig = make_subplots(rows=1, cols=2, subplot_titles=(
+        f"{team} Cumulative Goal Diff", f"{team} Win% vs XGBoost Predicted"),
+        horizontal_spacing=0.12)
+
+    fig.add_trace(go.Scatter(
+        x=dates, y=cum_gd, mode="lines", name="Actual GD",
+        line=dict(color=COLORS["EV_O"], width=2.5),
+    ), row=1, col=1)
+    fig.add_trace(go.Scatter(
+        x=dates, y=np.cumsum(pred_gds), mode="lines", name="Predicted GD (XGB)",
+        line=dict(color=COLORS["EV_D"], width=2, dash="dash"),
+    ), row=1, col=1)
+
+    fig.add_trace(go.Scatter(
+        x=gp, y=cum_wins / gp, mode="lines", name="Actual Win%",
+        line=dict(color=COLORS["EV_O"], width=2.5),
+    ), row=1, col=2)
+
+    # Predicted win% from XGB
+    pred_wins = []
+    for _, row in tg.iterrows():
+        if row["home_team"] == team:
+            pred_wins.append(row["pred_win_xgb"])
+        else:
+            pred_wins.append(1 - row["pred_win_xgb"])
+    cum_pred_wins = np.cumsum(pred_wins)
+    fig.add_trace(go.Scatter(
+        x=gp, y=cum_pred_wins / gp, mode="lines", name="XGB Expected Win%",
+        line=dict(color=COLORS["EV_D"], width=2, dash="dash"),
+    ), row=1, col=2)
+
+    fig.update_layout(height=400, plot_bgcolor="white",
+                       legend=dict(orientation="h", yanchor="bottom", y=1.08,
+                                   xanchor="center", x=0.5))
+    fig.update_yaxes(gridcolor="#eee", zeroline=True, zerolinecolor="gray")
+    fig.update_xaxes(gridcolor="#eee")
 
     return fig
 
