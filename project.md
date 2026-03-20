@@ -2,9 +2,9 @@
 
 ## Overview
 
-This project builds a comprehensive NHL skater rating system covering 10 seasons (2015–2025) across 1,999 players and 8,936 player-seasons. The system is modeled after Evan Miya's **BPR (Box Plus/Minus replacement)** and **DARKO**-style frameworks: two independent signal sources (on-ice regression + box score production) are combined via uncertainty-weighting, then extended to cover power play and penalty kill situations.
+This project builds a comprehensive NHL skater rating system covering 11 seasons (2015–2025) across ~2,000 players and ~9,000 player-seasons. The system is modeled after Evan Miya's **BPR (Box Plus/Minus replacement)** and **DARKO**-style frameworks: multiple independent signal sources (on-ice regression, box score production, on/off impact) are blended via predictive models, then smoothed with a **Bayesian carry-forward** that accumulates information across seasons.
 
-The output is a single composite metric — **total_BPR_adj** — that captures a player's value at even strength, on the power play, and on the penalty kill, normalized to league-average deployment so players can be compared regardless of how their coach uses them.
+The output is a carry-forward composite — **cf_total** — that captures a player's total value (even strength + special teams) and is designed to be maximally predictive of future performance. The system also produces component-level **GAR/WAR** breakdowns.
 
 ---
 
@@ -12,9 +12,11 @@ The output is a single composite metric — **total_BPR_adj** — that captures 
 
 | Source | Content | File |
 |--------|---------|------|
-| MoneyPuck play-by-play | Game events with player IDs, strength, xGoal | `data/events_*.csv` |
-| MoneyPuck skaters | Per-player per-season box score stats | `data/skaters_*.csv` |
-| MoneyPuck skaters-by-game | Per-player per-game situational TOI | `data/skaters_by_game.csv` |
+| MoneyPuck play-by-play | Game events with player IDs, strength, xGoal | `data/raw_pbp.csv` |
+| MoneyPuck shots | Shot-level data with xGoal model | `data/shots_2007-2024.csv` |
+| MoneyPuck skaters-by-game | Per-player per-game situational stats | `data/skaters_by_game.csv` |
+| MoneyPuck player bio | Birth dates, position, metadata | `data/moneypuck_player_bio.csv` |
+| RAPM lineup dataset | On-ice lineup data at CHANGE events | `data/rapm_dataset.csv` |
 
 All data is publicly available at [moneypuck.com/data.htm](https://moneypuck.com/data.htm).
 
@@ -23,24 +25,82 @@ All data is publicly available at [moneypuck.com/data.htm](https://moneypuck.com
 ## Pipeline
 
 ```
-data/events_*.csv  ──►  rapm_v2.py   ──►  data/rapm_results.csv
-                                      ──►  data/rapm_by_season.csv
+                                 ┌─────────────────────────────────────────┐
+                                 │           DATA PREPARATION              │
+                                 └─────────────────────────────────────────┘
+  data/raw_pbp.csv ─────► clean_pbp.py ──────► output/v2_clean_pbp.csv
+  data/rapm_dataset.csv ─► build_dataset.py ──► (enriched with zone starts, goalies, penalties)
+  data/shots_2007-2024.csv ──────────────────► (merged via build_dataset.py)
 
-data/skaters_*.csv ──►  box_score.py ──►  data/box_score_ratings.csv
+                                 ┌─────────────────────────────────────────┐
+                                 │          CORE RAPM (v2)                 │
+                                 └─────────────────────────────────────────┘
+  v2_clean_pbp.csv ─────► rapm_bayesian.py ──► output/v2_rapm_raw.csv      (Pass 1: uninformed)
+                          (--mode=raw)
+                          rapm_bayesian.py ──► output/v2_rapm_results.csv   (Pass 2: prior-informed)
+                          (--mode=prior)       output/v2_rapm_by_season.csv
 
-data/events_*.csv  ──►  pp_pk_rapm.py ──►  data/pp_rapm.csv
+                                 ┌─────────────────────────────────────────┐
+                                 │         ROLLING RAPM (v3)               │
+                                 └─────────────────────────────────────────┘
+  v2_clean_pbp.csv ─────► rolling_rapm.py ──► output/v3_rolling_rapm.csv         (3-season windows)
+                                              output/v3_rolling_rapm_latest.csv
 
-(all of above)     ──►  blend.py     ──►  data/final_ratings.csv
-                                      ──►  data/final_ratings_by_season.csv
+                                 ┌─────────────────────────────────────────┐
+                                 │       COMPONENT MODELS (v4)             │
+                                 └─────────────────────────────────────────┘
+  skaters_by_game.csv ──► bpm.py ──────────► output/v4_bpm_player_seasons.csv
+  v3_rolling_rapm.csv ──►                    (GV_O/D, OOI_O/D, RAPM_O/D per season)
+  pp_rapm.csv ──────────►
 
-(final_ratings)    ──►  viz.py       ──►  viz_output/
+  skaters_by_game.csv ──► epm.py ──────────► output/v4_epm_raw_per_game.csv
+                                              output/v4_epm_model_O.pkl
+                                              output/v4_epm_model_D.pkl
+
+                                 ┌─────────────────────────────────────────┐
+                                 │      PREDICTIVE COMPOSITE (v5)          │
+                                 └─────────────────────────────────────────┘
+  v4_bpm_player_seasons ► composite_v4.py ──► output/v5_composite_player_seasons.csv
+  skaters_by_game.csv ──►                     output/v5_season_war.csv
+
+                                 ┌─────────────────────────────────────────┐
+                                 │       CARRY-FORWARD (v6)                │
+                                 └─────────────────────────────────────────┘
+  v5_composite_* ───────► carry_forward.py ─► output/v6_carry_forward.csv
+  moneypuck_player_bio ─►
+  v2_gar_by_season ─────►
+
+                                 ┌─────────────────────────────────────────┐
+                                 │       DAILY RATINGS (v5)                │
+                                 └─────────────────────────────────────────┘
+  v4_epm_raw_per_game ──► daily.py ─────────► output/v5_daily_ratings.csv
+  skaters_by_game.csv ──►                     output/v5_daily_war.csv
+  v5_composite_* ───────►
+
+                                 ┌─────────────────────────────────────────┐
+                                 │         GAR/WAR (v2)                    │
+                                 └─────────────────────────────────────────┘
+  v2_rapm_by_season ────► gar.py ───────────► output/v2_gar_by_season.csv
+  skaters_by_game.csv ──►                     output/v2_gar_pooled.csv
+
+                                 ┌─────────────────────────────────────────┐
+                                 │        TEAM RATINGS (v6)                │
+                                 └─────────────────────────────────────────┘
+  (roster aggregation) ─► team_ratings.py ──► output/v6_team_game_ratings.csv
+                                              output/v6_team_season_ratings.csv
+
+                                 ┌─────────────────────────────────────────┐
+                                 │       VISUALIZATION / DASHBOARD         │
+                                 └─────────────────────────────────────────┘
+  (all outputs) ────────► dashboard/app.py ─► http://127.0.0.1:8050
+                          viz_v1.py / viz_v2.py ► PNG tables, HTML scatter
 ```
 
-Run with: `bash run_all.sh`
+Run scripts: `bash run_all.sh` (v1) or `bash run_all_v2.sh` (v2 Bayesian pipeline)
 
 ---
 
-## Step 1: Two-Pass RAPM (`rapm_v2.py`)
+## Step 1: Two-Pass Bayesian RAPM (`rapm_bayesian.py`)
 
 ### What is RAPM?
 
@@ -51,7 +111,7 @@ Run with: `bash run_all.sh`
 
 The regression coefficient for each player represents their per-event contribution to the outcome, controlling for every other player on the ice simultaneously. Ridge regularization (L2 penalty) handles the multicollinearity that arises when linemates always play together.
 
-The outcome variable is **expected goals (xGoal)** from MoneyPuck's shot model, supplemented with shots on goal, actual goals, and turnovers. These are combined into composite **BPR_O** and **BPR_D** components:
+The outcome variable is **expected goals (xGoal)** from MoneyPuck's shot model, supplemented with shots on goal, actual goals, turnovers, and giveaways. These are combined into composite **BPR_O** and **BPR_D** components:
 
 ```
 BPR_O = 0.50 × xGF_O + 0.22 × SOG_O + 0.15 × GF_O + 0.06 × TO_O − 0.04 × GA_O
@@ -63,251 +123,295 @@ Values are expressed in **per-60-minute** units (scaled by `EVENTS_PER_60 = 90`)
 
 ### Two-Pass Quality Adjustment
 
-Standard RAPM already controls for teammates and opponents by construction, but collinear linemates (players who always appear together) can have their individual contributions conflated — their shared ridge estimate absorbs their combined effect.
+Standard RAPM already controls for teammates and opponents by construction, but collinear linemates (players who always appear together) can have their individual contributions conflated.
 
-**Pass 1** runs standard pooled RAPM. **Pass 2** augments the design matrix with two scalar quality covariates computed per event:
+**Pass 1** runs standard pooled RAPM (uninformed). **Pass 2** augments the design matrix with two scalar quality covariates computed per event:
 
 - `acting_quality` — mean Pass 1 BPR_O of the 5 acting-team players
 - `defending_quality` — mean Pass 1 BPR_D of the 5 defending-team players
 
-Adding these covariates forces the regression to account for the average quality of a player's linemates and opponents as a control variable, leaving the individual player columns to capture residual differentiation. This is particularly useful for breaking up collinear forward lines (e.g., Crosby's line, McDavid's line) where a single player may otherwise absorb credit for the entire unit.
-
-Per-season fits use pooled Pass 1 ratings for quality covariates (avoiding circular dependency within a season).
-
-### Ridge Regression and Alpha Selection
-
-Alpha (regularization strength) is selected by 5-fold cross-validation over candidates `[100, 500, 1000, 5000, 10000]`. For the pooled model (~8,936 player-seasons of events), typically `alpha ≈ 1000`. Higher alpha pushes all coefficients toward zero; lower alpha risks overfitting to small samples.
+This breaks up collinear forward lines (e.g., McDavid's line) where a single player might otherwise absorb credit for the entire unit.
 
 ---
 
-## Step 2: Box Score Model (`box_score.py`)
+## Step 2: Rolling RAPM (`rolling_rapm.py`)
 
-The box score model provides an **independent signal** based on individual production stats, without relying on who else was on the ice. It acts as a prior that is especially informative for players with limited on-ice event data.
+Instead of pooling ALL seasons into one estimate, fits separate Ridge models on overlapping **3-season windows** (e.g., 2015-2017, 2016-2018, ..., 2022-2024). This captures a player's talent at their current level rather than a career average.
 
-### Features
+Each player-season is matched to the most recent window containing that season. The rolling RAPM values feed into the BPM component model (v4), providing more current RAPM estimates than per-season or career-pooled alternatives.
 
-From MoneyPuck's skaters dataset, per-60 rates are computed (normalized by TOI/60):
-
-| Feature | Description |
-|---------|-------------|
-| `G60` | Goals per 60 |
-| `A1_60` | Primary assists per 60 |
-| `A2_60` | Secondary assists per 60 |
-| `SOG60` | Shots on goal per 60 |
-| `blocks60` | Blocked shots per 60 |
-| `hits60` | Hits per 60 |
-| `GA60` | Giveaways per 60 |
-| `TO60` | Takeaways per 60 |
-| `CF60pct` | Corsi for % (shot attempt share) |
-
-Stats are **position-normalized** by subtracting the position-group mean (F vs D) before regression, so forwards and defensemen are evaluated against their own baselines.
-
-### Model
-
-An ElasticNet regression is fit with pooled RAPM BPR as the target, using cross-validated regularization. The learned coefficients produce:
-
-- `box_O` — offensive box score rating (driven by G60, A1_60, SOG60)
-- `box_D` — defensive box score rating (driven by blocks60, CF60pct, TO60)
-- `box_BPR` = `box_O + box_D`
-
-The model achieves R² ≈ 0.45–0.60 on held-out player-seasons — capturing about half the variance in RAPM with publicly visible stats alone.
+Uses pre-computed ridge alphas from the full-data fit to skip cross-validation and run fast.
 
 ---
 
-## Step 3: PP/PK RAPM (`pp_pk_rapm.py`)
+## Step 3: Component Models (`bpm.py`)
 
-Power play and penalty kill situations require a separate model because 5v5 RAPM only reflects even-strength performance. Special teams can represent 15–20% of a player's ice time and are a significant source of offensive and defensive value.
+Three independent signal sources are computed per player-season:
 
-### Design
+### Goal Value (GV)
+Ridge regression from ~25 box-score features → on-ice goals per 60. Captures individual production that translates to on-ice goal generation (offense) and suppression (defense).
 
-A single unified Ridge regression runs on all **unequal-strength events**: 5v4, 4v5, 5v3, 3v5.
+**Features:** Individual xGoals, goals, primary assists, shots, finishing talent, defensive actions (blocks, takeaways, giveaways), zone deployment.
 
-For each event, the team with more skaters is designated the **PP team** (+1 columns) and the team with fewer skaters is the **PK team** (−1 columns). The outcome variable is signed:
+### On/Off Impact (OOI)
+Ridge regression from the same box-score features → on-ice xGF differential relative to off-ice. Captures a player's effect on team shot quality when they're on vs off the ice.
 
-```
-y_signed = +xGoal   if PP team is acting (shooting)
-y_signed = −xGoal   if PK team is acting (clearing, shooting)
-```
+### RAPM (Rolling)
+3-season rolling RAPM values from `rolling_rapm.py`, precision-shrunk before use. Noisy RAPM estimates (high SE) are attenuated toward zero; precise estimates are kept at face value.
 
-This means:
-- A positive coefficient for a PP player → they generate more xGoal on the power play (**PP_O**)
-- A positive coefficient for a PK player → their team *suppresses* xGoal against on the PK (**PK_D**)
-
-### Alpha Selection
-
-`RidgeCV` runs over candidates `[5000, 10000, 20000, 50000, 100000]`. CV typically selects `alpha = 5000` for the PP dataset, which is smaller and noisier than the 5v5 dataset.
-
-### Minimum Events Filter
-
-Players with fewer than 300 PP/PK events are excluded to reduce noise from fringe players who may have only a handful of appearances, where ridge cannot adequately regularize.
-
-### Caveats
-
-- PP/PK ratings are **pooled career** only (no per-season PP model due to small per-season sample sizes)
-- PK_D is noisier than PP_O because penalty killing is heavily system-driven; a player's PK rating partially reflects their team's system quality
-- Some fringe retired players appear in the top PK_D list (e.g., P.A. Parenteau, Matt Carle) — a known artifact of team system effects from limited personal data
+All three are per-season, position-aware (with `isD` dummy + zone start controls).
 
 ---
 
-## Step 4: Blend (`blend.py`)
+## Step 4: Predictive Composite (`composite_v4.py`)
 
-### DARKO-Style Uncertainty Weighting
+Two predictive Ridge models, each answering a different question:
 
-The 5v5 RAPM and box score ratings are combined using an **uncertainty-weighted blend** inspired by the DARKO framework. The key insight: RAPM is more accurate with more data, but box score ratings provide stable signal even for players with small samples.
+### Layer 1: Production Value (PV)
+Predicts **next-season GV** (individual production). GV dominates this layer — production is stable and self-predictive. This is where Kucherov and Kaprizov get credit.
 
-The blend weight is a **sigmoid function of TOI (ice time)**:
+### Layer 2: Impact Value (IV)
+Predicts **next-season on-ice impact** (xGF/xGA differentials). OOI and RAPM dominate this layer — on-ice context predicts future system impact. This is where McAvoy and Tkachuk get credit.
 
-```python
-rapm_weight(toi) = 1 / (1 + exp(−scale × (toi − midpoint)))
+### Final Composite
+```
+composite_O = λ × PV_O + (1-λ) × IV_O    (λ = 0.5)
+composite_D = λ × PV_D + (1-λ) × IV_D
+composite   = composite_O + composite_D
 ```
 
-**Per-season blend:**
-- Midpoint: 700 minutes (half a full starter season)
-- At 200 min → RAPM weight ≈ 0.14 (lean heavily on box score)
-- At 700 min → RAPM weight = 0.50 (equal blend)
-- At 1,400 min → RAPM weight ≈ 0.97 (trust RAPM almost entirely)
+Both layers are trained via **leave-one-season-out cross-validation** with TOI-weighted samples. Output is position-centered (forwards and defensemen each average zero).
 
-**Pooled (career) blend:**
-- Midpoint: 2,000 minutes (~2 solid seasons)
-- At 500 min → RAPM weight ≈ 0.22
-- At 2,000 min → RAPM weight = 0.50
-- At 7,000 min → RAPM weight ≈ 0.99
+---
 
-Established veterans with thousands of minutes of career ice time get ratings that are almost entirely RAPM-driven. Rookies and call-up players blend significantly toward the box score prior, preventing large-sample noise from dominating their ratings.
+## Step 5: Carry-Forward (`carry_forward.py`)
 
-```
-final_BPR_O = w × rapm_BPR_O + (1 − w) × box_O
-final_BPR_D = w × rapm_BPR_D + (1 − w) × box_D
-final_BPR   = final_BPR_O + final_BPR_D
-```
+This is the key innovation for predictiveness. Without carry-forward, the composite treats each season independently — a player's 2023 rating has zero influence on their 2024 rating. The carry-forward layer adds DARKO-style season-to-season memory.
 
-### PP/PK Situational Blend
+### Mechanics
 
-Once 5v5 and PP/PK ratings are available, they are combined into a single composite using each player's actual situational TOI:
+For each player-season:
+
+1. **Raw signal** = current season's composite_O/D from composite_v4.py
+2. **Prior** = previous season's carry-forward rating × age regression factor
+3. **Blend** = `w × raw + (1-w) × prior`, where w = sigmoid(TOI)
 
 ```
-total_BPR = (toi_5v5 × final_BPR + toi_pp × PP_O + toi_pk × PK_D)
-            / (toi_5v5 + toi_pp + toi_pk)
+w(toi) = 1 / (1 + exp(-0.004 × (toi - 900)))
 ```
 
-This weights situations by how much time a player actually spends in each one. A PP specialist who logs 20% of their ice time on the power play gets significant credit for their PP_O.
+At 900 minutes of 5v5 TOI (~full season), the blend is 50/50 between current data and carried-forward prior. Below that, the prior dominates. This means even full-season players retain meaningful career information, rather than resetting each year.
 
-### Deployment-Neutral Adjustment (`total_BPR_adj`)
+### Age Curve
 
-A second composite uses **league-average situational weights** computed from total skater ice time across all players and seasons:
+The carry-forward retention (`BASE_CARRY = 0.85`) is modified by age:
+
+| Age | Factor | Effective Carry |
+|-----|--------|-----------------|
+| < 22 | 0.70 | 0.60 — rookies change fast |
+| 22-24 | 0.85 | 0.72 — still developing |
+| 25-30 | 1.00 | 0.85 — peak stability |
+| 31-33 | 0.95 | 0.81 — beginning of decline |
+| 34+ | 0.85 | 0.72 — don't anchor to peak ratings |
+
+For a player's first season, the prior is league average (0).
+
+### Per-Season Special Teams
+
+The carry-forward system uses **per-season PP/PK rates** from the GAR module (v2_gar_by_season.csv), replacing the pooled career PP_O/PK_D used in earlier pipeline versions.
+
+---
+
+## Step 6: Daily Bayesian Ratings (`daily.py`)
+
+DARKO-style per-game updates across 5 components with exponential decay (halflife=30 games):
+
+| Component | Source | Description |
+|-----------|--------|-------------|
+| EV_O | XGBoost EPM | 5v5 offensive impact per 60 |
+| EV_D | XGBoost EPM | 5v5 defensive impact per 60 |
+| PP | Box score (ixG + 0.7×A1) | Power play production above league avg |
+| PK | On-ice xGA | Penalty kill suppression above league avg |
+| PEN | Drawn - Taken | Penalty drawing/taking value |
+
+Each game updates the posterior: `posterior = (prior_precision × prior + evidence_weight × observation) / total_precision`. Priors come from the composite (EV) and career PP/PK RAPM. Seasons carry over with 85% decay.
+
+---
+
+## Step 7: GAR/WAR (`gar.py`, `composite_v4.py`)
+
+Goals Above Replacement / Wins Above Replacement, with 8 skater components:
+
+| Component | Description |
+|-----------|-------------|
+| xEV_O | Even-strength offensive (expected) |
+| xEV_D | Even-strength defensive (expected) |
+| FINISH_O | Offensive finishing above expected |
+| FINISH_D | Defensive finishing suppression |
+| PP | Power play value |
+| PK | Penalty kill value |
+| PEN | Penalty drawing value |
+| FO | Faceoff wins → goal value |
 
 ```
-League-average weights (approx):
-  ES  = 0.845   (even strength)
-  PP  = 0.086   (power play)
-  PK  = 0.069   (penalty kill)
-
-total_BPR_adj = W_ES × final_BPR + W_PP × PP_O + W_PK × PK_D
+xGAR = xEV_O + xEV_D + PP + PK + PEN + FO
+GAR  = xGAR + FINISH_O + FINISH_D
+WAR  = GAR / 6.0    (goals → wins)
 ```
 
-This is the **preferred comparison metric**. Because every player is evaluated at the same deployment weights, rankings are driven by player quality rather than coaching decisions. A player who logs unusually heavy PP time won't be artificially inflated just because they have more of their minutes in a high-value situation.
+Position-specific replacement levels at the 17th percentile.
+
+---
+
+## Predictiveness Testing
+
+Predictive validity was measured via year-over-year r² (how well season N predicts season N+1) across 4,986 player-season pairs (min 400 5v5 TOI).
+
+### YoY Stability (self-prediction)
+
+| Metric | r² | Notes |
+|--------|-----|-------|
+| **Carry-Forward (v6)** | **0.563** | Best composite metric |
+| CF Offensive (cf_O) | 0.722 | Surpasses goals/GP |
+| CF Defensive (cf_D) | 0.864 | Near ceiling |
+| CF WAR | 0.514 | ~10x improvement over raw WAR |
+| Raw Composite (v5) | 0.266 | Without carry-forward |
+| OOI_D | 0.902 | Most stable individual component |
+| OOI_O | 0.673 | |
+| RAPM_O | 0.637 | |
+| RAPM_D | 0.661 | |
+| GV_O | 0.204 | |
+| Raw BPR (total) | 0.008 | Per-season RAPM is very noisy |
+| Raw WAR/GAR | 0.054 | Before carry-forward |
+
+**Baselines (counting stats):**
+
+| Stat | r² |
+|------|-----|
+| xGoals/GP | 0.804 |
+| Points/GP | 0.705 |
+| Goals/GP | 0.631 |
+
+### Carry-Forward Improvement Summary
+
+| Test | Raw (v5) r² | Carry-Forward (v6) r² | Improvement |
+|------|------------|---------------------|-------------|
+| YoY Self | 0.266 | **0.563** | **+112%** |
+| → Next Goals/GP | 0.142 | **0.195** | +37% |
+| → Next Points/GP | 0.154 | **0.210** | +37% |
+| → Next xGoals/GP | 0.153 | **0.212** | +38% |
+| → Next Composite | 0.266 | **0.278** | +4% |
+
+### By Position
+
+| Position | Raw YoY r² | CF YoY r² | CF → Goals r² | CF → Points r² |
+|----------|-----------|----------|--------------|---------------|
+| Forwards | 0.274 | **0.593** | 0.241 | 0.248 |
+| Defensemen | 0.204 | **0.415** | 0.045 | 0.055 |
+
+### Key Findings
+
+1. **Carry-forward is the single biggest predictor improvement** — more than doubling YoY stability by accumulating career information instead of resetting each season.
+2. **CF_O (offensive) at r²=0.722** surpasses goals/GP self-prediction (0.631), making it a genuinely strong offensive talent metric.
+3. **Defensive metrics are harder to predict** across the board — CF_D (0.864) is strong but still trails OOI_D (0.902) as an individual component.
+4. **Counting stats still beat composite metrics** at predicting themselves (points/GP at 0.705 vs cf_total at 0.563), but that's expected — the composite blends offense and defense, and defensive prediction is inherently noisier.
+5. **Raw per-season BPR/WAR/GAR are too noisy** for single-season use (r² < 0.06). The carry-forward fixes this by smoothing across seasons.
+6. **Predicting next-season counting stats:** cf_O is the best advanced metric predictor of goals/GP (0.356) and points/GP (0.488), substantially better than GV_O, OOI_O, or RAPM_O alone.
 
 ---
 
 ## Outputs
 
-| File | Description |
-|------|-------------|
-| `data/rapm_results.csv` | Pooled career RAPM for 1,999 players |
-| `data/rapm_by_season.csv` | Per-season RAPM for 8,936 player-seasons |
-| `data/box_score_ratings.csv` | Box score model ratings per player-season |
-| `data/pp_rapm.csv` | PP_O and PK_D ratings for 1,055 players |
-| `data/final_ratings.csv` | Pooled blended composite ratings |
-| `data/final_ratings_by_season.csv` | Per-season blended composite ratings |
-| `viz_output/` | PNGs + interactive HTML charts |
-
-### Visualization Outputs
+### Core Outputs
 
 | File | Description |
 |------|-------------|
-| `top10_YYYY.png` | Top 10 skaters per season (5v5 BPR table) |
-| `career_trajectories.png` | BPR over time for elite players |
-| `bpr_scatter.html` | Interactive BPR_O vs BPR_D, all player-seasons |
-| `top10_pp_specialists.png` | Top 10 career PP_O |
-| `top10_pk_specialists.png` | Top 10 career PK_D |
-| `pp_pk_scatter.html` | Interactive PP_O vs PK_D scatter |
+| `output/v6_carry_forward.csv` | **Primary output:** carry-forward composite per player-season with WAR |
+| `output/v5_composite_player_seasons.csv` | Per-season raw composite + PV/IV/GV/OOI/RAPM components |
+| `output/v5_season_war.csv` | Season WAR leaderboard (from raw composite) |
+| `output/v5_daily_ratings.csv` | Per-player-game smoothed 5-component ratings |
+| `output/v5_daily_war.csv` | Per-player-season aggregated daily WAR |
+
+### RAPM Outputs
+
+| File | Description |
+|------|-------------|
+| `output/v2_rapm_results.csv` | Pooled prior-informed RAPM (~2,000 players) |
+| `output/v2_rapm_by_season.csv` | Per-season prior-informed RAPM (~9,000 player-seasons) |
+| `output/v2_rapm_raw.csv` | Pooled uninformed RAPM (training target) |
+| `output/v3_rolling_rapm.csv` | 3-season rolling window RAPM |
+| `output/v3_rolling_rapm_latest.csv` | Most recent window per player |
+
+### Component Outputs
+
+| File | Description |
+|------|-------------|
+| `output/v4_bpm_player_seasons.csv` | GV, OOI, RAPM components per player-season |
+| `output/v4_epm_raw_per_game.csv` | XGBoost per-game EPM predictions |
+| `output/v2_gar_by_season.csv` | Component-level GAR (8 skater components) per season |
+| `output/v2_gar_pooled.csv` | Career-pooled GAR/WAR |
+
+### Other Outputs
+
+| File | Description |
+|------|-------------|
+| `output/v2_final_ratings.csv` | V2 pooled blended ratings |
+| `output/v2_final_ratings_by_season.csv` | V2 per-season blended ratings |
+| `output/pp_rapm.csv` | Career PP_O and PK_D ratings |
+| `output/v6_team_game_ratings.csv` | Team-level per-game ratings |
+| `output/v6_team_season_ratings.csv` | Team-level season ratings |
+
+### Analysis Outputs
+
+| File | Description |
+|------|-------------|
+| `output/predictiveness_yoy_stability.csv` | YoY r² for all metrics |
+| `output/predictiveness_cross_matrix.csv` | Cross-metric prediction matrix |
+| `output/predictiveness_basic_stats.csv` | Metrics → basic stats prediction |
+
+### Visualization
+
+| File | Description |
+|------|-------------|
+| `dashboard/app.py` | Interactive Dash explorer (http://127.0.0.1:8050) |
+| `viz_output/top10_YYYY.png` | Top 10 skaters per season by BPR |
+| `viz_output/career_trajectories.png` | BPR over time for elite players |
+| `viz_output/bpr_scatter.html` | Interactive BPR_O vs BPR_D scatter |
 
 ---
 
 ## Metric Interpretation Guide
 
-| Metric | What it measures | Units |
-|--------|-----------------|-------|
-| `BPR_O` | Offensive on-ice impact (5v5) | per-60 xGoal equivalent |
-| `BPR_D` | Defensive on-ice impact (5v5) | per-60 xGoal equivalent |
-| `final_BPR` | Blended 5v5 overall rating | per-60 xGoal equivalent |
-| `rapm_weight` | Fraction of blend coming from RAPM | 0–1 |
-| `PP_O` | Power play offensive impact | per-60 (PP events) |
-| `PK_D` | Penalty kill defensive impact | per-60 (PK events) |
-| `total_BPR` | Composite using player's actual deployment | per-60 overall |
-| `total_BPR_adj` | **Composite using league-avg deployment** | per-60 overall |
+| Metric | What it measures | Units | Stability (YoY r²) |
+|--------|-----------------|-------|---------------------|
+| `cf_total` | **Carry-forward total value** | per-60 composite | 0.563 |
+| `cf_O` | Carry-forward offensive | per-60 composite | 0.722 |
+| `cf_D` | Carry-forward defensive | per-60 composite | 0.864 |
+| `composite` | Raw single-season total value | per-60 composite | 0.266 |
+| `composite_O` | Raw offensive composite | per-60 composite | 0.477 |
+| `composite_D` | Raw defensive composite | per-60 composite | 0.746 |
+| `GV_O` / `GV_D` | Goal Value (box score → on-ice goals) | per-60 | 0.204 / 0.331 |
+| `OOI_O` / `OOI_D` | On/Off Impact (box score → relative xGF) | per-60 | 0.673 / 0.902 |
+| `RAPM_O` / `RAPM_D` | Rolling 3-season RAPM | per-60 | 0.637 / 0.661 |
+| `BPR_O` / `BPR_D` | Per-season RAPM composite | per-60 | 0.019 / 0.014 |
+| `PP_O` | Power play offensive impact | per-60 (PP events) | — |
+| `PK_D` | Penalty kill defensive impact | per-60 (PK events) | — |
+| `WAR` | Wins Above Replacement | wins | 0.514 (CF) |
 
-**Scale reference:** BPR values above +0.50 represent elite players; values near 0.00 are league average; values below −0.30 are replacement-level or worse.
-
----
-
-## Key Results
-
-### Career Leaders (5v5 BPR, pooled 2015–2025)
-
-| Player | Pos | TOI (min) | BPR_O | BPR_D | final_BPR |
-|--------|-----|-----------|-------|-------|-----------|
-| Charlie McAvoy | D | 11,809 | +0.336 | +0.628 | **+0.964** |
-| Auston Matthews | F | 12,492 | +0.339 | +0.544 | **+0.883** |
-| Patrice Bergeron | F | 19,542 | +0.515 | +0.344 | **+0.859** |
-| Hampus Lindholm | D | 17,020 | +0.289 | +0.535 | **+0.824** |
-| Matthew Tkachuk | F | 11,494 | +0.365 | +0.331 | **+0.696** |
-
-### Career Leaders (total_BPR_adj — overall with PP/PK)
-
-| Player | Pos | 5v5 BPR | PP_O | PK_D | total_BPR_adj |
-|--------|-----|---------|------|------|---------------|
-| Charlie McAvoy | D | +0.964 | +0.025 | +0.131 | **+0.826** |
-| Patrice Bergeron | F | +0.859 | +0.678 | +0.071 | **+0.789** |
-| Auston Matthews | F | +0.883 | +0.253 | +0.046 | **+0.771** |
-| Hampus Lindholm | D | +0.824 | +0.035 | +0.071 | **+0.704** |
-| Connor McDavid | F | +0.622 | +0.932 | +0.179 | **+0.618** |
-
-*Note: McAvoy ranks first overall because his 5v5 RAPM is the highest in the dataset and he has solid (though not elite) PP/PK contributions. Bergeron climbs with the overall composite due to his historically elite PP_O (+0.678).*
-
-### Top PP Specialists (career PP_O)
-
-| Player | Pos | PP_O |
-|--------|-----|------|
-| Connor McDavid | F | +0.932 |
-| Ryan Nugent-Hopkins | F | +0.898 |
-| Brayden Point | F | +0.800 |
-| Mikko Rantanen | F | +0.685 |
-| Patrice Bergeron | F | +0.678 |
-| Roope Hintz | F | +0.603 |
-| Nikita Kucherov | F | +0.595 |
-| Leon Draisaitl | F | +0.588 |
-
-### 2022–23 Season Leaders (total_BPR_adj)
-
-| Player | Pos | final_BPR | PP_O | PK_D | total_BPR_adj |
-|--------|-----|-----------|------|------|---------------|
-| Charlie McAvoy | D | +1.097 | +0.025 | +0.131 | **+0.938** |
-| Auston Matthews | F | +0.992 | +0.253 | +0.046 | **+0.863** |
-| Patrice Bergeron | F | +0.941 | +0.678 | +0.071 | **+0.858** |
-| Connor McDavid | F | +0.795 | +0.932 | +0.179 | **+0.764** |
-| Hampus Lindholm | D | +0.823 | +0.035 | +0.071 | **+0.703** |
+**Scale reference:** Composite values above +0.50 represent elite players; values near 0.00 are league average; values below −0.30 are replacement-level or worse.
 
 ---
 
 ## Known Limitations
 
-**PK_D noise:** Penalty kill ratings are noisier than PP or 5v5 ratings. Because teams have fewer skaters in structured, coach-driven systems, individual PK performance is hard to disentangle from team system effects. Some retired or role players (e.g., P.A. Parenteau, Matt Carle) appear anomalously high in the PK_D list — this is a known artifact.
+**Defensive prediction ceiling:** Defensive value is inherently harder to isolate and predict than offensive value. CF_D (r²=0.864) is strong but benefits heavily from carry-forward smoothing — the raw defensive composite (0.746) is more volatile than offense.
 
-**PP/PK is career-pooled:** The PP and PK models only produce career ratings, not per-season ratings. For the per-season composite, each season uses the player's career PP_O and PK_D — which is a reasonable approximation but doesn't capture year-to-year special teams changes.
+**Counting stats baseline:** Simple counting stats like points/GP (r²=0.705) still beat cf_total (0.563) at self-prediction. This is partly structural — the composite tries to capture offense AND defense, and the defensive side adds noise. The offensive component (cf_O at 0.722) does surpass goals/GP (0.631).
 
-**Small-sample blending:** The box score blend provides stability for low-TOI players, but players with only a season or two of data may still have ratings that are hard to interpret. The `rapm_weight` column shows how much of the rating comes from RAPM (closer to 1.0 = more trustworthy).
+**Per-season RAPM is noisy:** Raw per-season BPR has an r² of just 0.008 year-over-year — essentially noise. This is why the carry-forward and rolling windows are critical. Single-season RAPM should not be used as a standalone metric.
 
-**No goalie adjustment:** RAPM implicitly controls for goalies (they appear in every event for their team), but goalie quality isn't separately modeled. Skater defensive ratings partially reflect the quality of their starting goalie.
+**No goalie adjustment:** RAPM implicitly controls for goalies (they appear in every event), but goalie quality isn't separately modeled in the composite. Skater defensive ratings partially reflect goalie quality.
 
-**Strength of schedule:** Two-pass quality adjustment partially addresses this, but players who spend their entire career on weak teams may still have slightly inflated defensive ratings.
+**First-season players:** Players in their first season have a prior of league average (0), so their carry-forward is entirely driven by current-season data. Draft position or junior stats could improve first-year priors.
+
+**Age curve is approximate:** The age regression factors are hand-tuned, not empirically optimized. A data-driven age curve (fit to the actual YoY changes by age) could improve the carry-forward further.

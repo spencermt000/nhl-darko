@@ -19,27 +19,27 @@ from plotly.subplots import make_subplots
 from dash import Dash, html, dcc, Input, Output, dash_table
 
 # ── Load all data ─────────────────────────────────────────────────────────────
-daily = pd.read_csv("data/v5_daily_ratings.csv")
+daily = pd.read_csv("output/v5_daily_ratings.csv")
 daily["game_date"] = pd.to_datetime(daily["game_date"])
 daily["total_gar"] = daily["EV_O_gar"] + daily["EV_D_gar"] + daily["PP_gar"] + daily["PK_gar"] + daily["PEN_gar"]
 
-daily_war = pd.read_csv("data/v5_daily_war.csv")
+daily_war = pd.read_csv("output/v5_daily_war.csv")
 
 # BPM components (GV, OOI, RAPM per season — through 2024)
-bpm = pd.read_csv("data/v4_bpm_player_seasons.csv")
+bpm = pd.read_csv("output/v4_bpm_player_seasons.csv")
 
 # Composite (PV, IV, composite — through 2024)
-composite = pd.read_csv("data/v5_composite_player_seasons.csv")
+composite = pd.read_csv("output/v5_composite_player_seasons.csv")
 
 # Composite WAR (through 2024)
-composite_war = pd.read_csv("data/v5_season_war.csv")
+composite_war = pd.read_csv("output/v5_season_war.csv")
 
 # Rolling RAPM (latest window per player)
-rapm_latest = pd.read_csv("data/v3_rolling_rapm_latest.csv")
+rapm_latest = pd.read_csv("output/v3_rolling_rapm_latest.csv")
 
 # Team ratings
-team_season = pd.read_csv("data/v6_team_season_ratings.csv")
-team_games = pd.read_csv("data/v6_team_game_ratings.csv")
+team_season = pd.read_csv("output/v6_team_season_ratings.csv")
+team_games = pd.read_csv("output/v6_team_game_ratings.csv")
 team_games["game_date"] = pd.to_datetime(team_games["game_date"])
 TEAM_SEASONS = sorted(team_season["season"].unique())
 TEAM_LATEST = max(TEAM_SEASONS)
