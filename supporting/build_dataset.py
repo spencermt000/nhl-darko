@@ -35,12 +35,26 @@ pbp_cols = [
 ]
 
 print("Loading raw_pbp.csv...", file=sys.stderr)
-pbp = pd.read_csv(
-    "data/raw_pbp.csv",
-    usecols=pbp_cols,
-    dtype={"game_id": "int64", "event_id": "int64",
-           "event_player_1_id": "Int64", "event_player_2_id": "Int64"},
-)
+_dtype = {"game_id": "int64", "event_id": "int64",
+          "event_player_1_id": "Int64", "event_player_2_id": "Int64"}
+pbp = pd.read_csv("data/raw_pbp.csv", usecols=pbp_cols, dtype=_dtype)
+
+# Append 2025-26 season if available
+import os
+if os.path.exists("data/raw_pbp_2025.csv"):
+    print("  Loading raw_pbp_2025.csv...", file=sys.stderr)
+    # 2025 file may not have all columns (x_fixed, strength, etc.) — read what's available
+    pbp_2025_cols = [c for c in pbp_cols if c != "x_fixed" and c != "y_fixed" and c != "strength"]
+    try:
+        pbp_2025 = pd.read_csv("data/raw_pbp_2025.csv", usecols=pbp_2025_cols, dtype=_dtype)
+    except ValueError:
+        # Some columns may not exist — read all and select what's available
+        pbp_2025 = pd.read_csv("data/raw_pbp_2025.csv", dtype={"game_id": "int64", "event_id": "int64"})
+        pbp_2025_cols_avail = [c for c in pbp_cols if c in pbp_2025.columns]
+        pbp_2025 = pbp_2025[pbp_2025_cols_avail]
+    pbp = pd.concat([pbp, pbp_2025], ignore_index=True)
+    print(f"  Appended {len(pbp_2025):,} rows from 2025-26", file=sys.stderr)
+
 pbp = pbp[pbp["event_type"].isin(ALL_NEEDED)].copy()
 print(f"  {len(pbp):,} rows after filtering", file=sys.stderr)
 
@@ -50,6 +64,13 @@ raw_goalie = pd.read_csv(
     "data/raw_pbp.csv",
     usecols=["event_goalie_name", "event_goalie_id"],
 )
+# Append 2025 goalie data
+if os.path.exists("data/raw_pbp_2025.csv"):
+    raw_goalie_2025 = pd.read_csv(
+        "data/raw_pbp_2025.csv",
+        usecols=["event_goalie_name", "event_goalie_id"],
+    )
+    raw_goalie = pd.concat([raw_goalie, raw_goalie_2025], ignore_index=True)
 raw_goalie = raw_goalie.dropna().drop_duplicates()
 raw_goalie["event_goalie_id"] = raw_goalie["event_goalie_id"].astype(int)
 goalie_name_to_id = (
@@ -153,6 +174,18 @@ lineups = pd.read_csv("output/rapm_dataset.csv", dtype={"event_id": "int64"})
 lineups = lineups.drop(columns=["strength"], errors="ignore")  # avoid suffix conflict
 lineups["game_id"] = lineups["event_id"] // 10000
 
+# Append 2025-26 lineup data if available
+if os.path.exists("output/rapm_dataset_2025.csv"):
+    print("  Loading rapm_dataset_2025.csv...", file=sys.stderr)
+    lineups_2025 = pd.read_csv("output/rapm_dataset_2025.csv", dtype={"event_id": "int64"})
+    # Drop columns that build_dataset.py creates itself to avoid merge conflicts
+    lineups_2025 = lineups_2025.drop(
+        columns=["strength", "home_goalie_id", "away_goalie_id"], errors="ignore"
+    )
+    lineups_2025["game_id"] = lineups_2025["event_id"] // 10000
+    lineups = pd.concat([lineups, lineups_2025], ignore_index=True)
+    print(f"  Appended {len(lineups_2025):,} rows from 2025-26", file=sys.stderr)
+
 rapm_events = rapm_events.sort_values(["game_id", "event_id"]).reset_index(drop=True)
 lineups = lineups.sort_values("event_id").reset_index(drop=True)
 
@@ -166,7 +199,7 @@ rapm_events = pd.merge_asof(
 print(f"  {rapm_events['home_on_ice'].notna().sum():,} rows with lineup data", file=sys.stderr)
 
 # ── 6. Load MoneyPuck shots for xGoal + rest differential ────────────────────
-print("Loading shots_2007-2024.csv...", file=sys.stderr)
+print("Loading shots data...", file=sys.stderr)
 shot_cols = [
     "season", "game_id", "period", "time",
     "shooterPlayerId", "xGoal", "shotWasOnGoal", "shotType", "shotDistance",
@@ -174,6 +207,16 @@ shot_cols = [
     "averageRestDifference",
 ]
 mp = pd.read_csv("data/shots_2007-2024.csv", usecols=shot_cols)
+
+# Append 2025-26 shots if available
+if os.path.exists("data/shots_2025.csv"):
+    print("  Loading shots_2025.csv...", file=sys.stderr)
+    mp_2025 = pd.read_csv("data/shots_2025.csv")
+    # Select only the columns we need (MoneyPuck may have extra columns)
+    mp_2025_cols = [c for c in shot_cols if c in mp_2025.columns]
+    mp_2025 = mp_2025[mp_2025_cols]
+    mp = pd.concat([mp, mp_2025], ignore_index=True)
+    print(f"  Appended {len(mp_2025):,} shots from 2025-26", file=sys.stderr)
 
 # Reconstruct full game_id (MoneyPuck uses start-year labeling)
 mp["full_game_id"] = (
@@ -255,6 +298,12 @@ out_cols = [
     "zone_start", "seconds_since_faceoff",
     "rest_differential",
 ]
+# Ensure goalie ID columns exist (may be all NaN for 2025 data)
+for col in ["home_goalie_id", "away_goalie_id"]:
+    if col not in rapm_events.columns:
+        rapm_events[col] = pd.NA
+
+out_cols = [c for c in out_cols if c in rapm_events.columns]
 out = rapm_events[out_cols]
 out.to_csv("output/v2_clean_pbp.csv", index=False)
 

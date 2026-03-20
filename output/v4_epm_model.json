@@ -1,0 +1,31 @@
+{
+  "architecture": "Separate O/D XGBoost models: box scores \u2192 RAPM (NBA EPM style)",
+  "r2_O": 0.749,
+  "r2_D": 0.769,
+  "n_features_O": 56,
+  "n_features_D": 31,
+  "top_O_features": {
+    "O_xGPct_rel": 0.0504,
+    "O_iSOG_raw": 0.0379,
+    "O_oiXGF_rate": 0.0288,
+    "O_iSOG_rate": 0.0276,
+    "O_fenwick_rel": 0.0259,
+    "O_xG_per_shot": 0.0209,
+    "O_iMDShots_raw": 0.0206,
+    "O_iSA_rate": 0.0202,
+    "O_iSA_raw": 0.0197,
+    "O_ozPct": 0.0196
+  },
+  "top_D_features": {
+    "D_oiSOGA_rate": 0.1099,
+    "D_isD": 0.0966,
+    "D_oiGA_rate": 0.0513,
+    "D_blocks_rate": 0.0496,
+    "D_oiXGA_rate": 0.047,
+    "D_blocks_raw": 0.0393,
+    "D_oiSAA_rate": 0.0312,
+    "D_dzEndPct": 0.0312,
+    "D_xGPct_rel": 0.031,
+    "D_foLost_rate": 0.0303
+  }
+}
