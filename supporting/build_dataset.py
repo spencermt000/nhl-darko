@@ -52,6 +52,29 @@ if os.path.exists("data/raw_pbp_2025.csv"):
         pbp_2025 = pd.read_csv("data/raw_pbp_2025.csv", dtype={"game_id": "int64", "event_id": "int64"})
         pbp_2025_cols_avail = [c for c in pbp_cols if c in pbp_2025.columns]
         pbp_2025 = pbp_2025[pbp_2025_cols_avail]
+    # Normalize season: raw file uses end-year (2026) but pipeline uses start-year (2025)
+    pbp_2025.loc[pbp_2025["season"] == 2026, "season"] = 2025
+
+    # Fill missing goalie names from raw_data_2025.csv (raw_pbp_2025 has NaN goalies)
+    if pbp_2025["home_goalie"].isna().all() and os.path.exists("data/raw_data_2025.csv"):
+        print("  Filling 2025 goalie names from raw_data_2025.csv...", file=sys.stderr)
+        rd_goalies = pd.read_csv(
+            "data/raw_data_2025.csv",
+            usecols=["game_id", "event_id", "home_goalie", "away_goalie"],
+            dtype={"game_id": "int64", "event_id": "int64"},
+        )
+        # Drop duplicate rows (raw_data may have more events), keep first per event
+        rd_goalies = rd_goalies.drop_duplicates(subset=["game_id", "event_id"], keep="first")
+        # Merge on game_id + event_id to fill goalie columns
+        pbp_2025 = pbp_2025.drop(columns=["home_goalie", "away_goalie"], errors="ignore")
+        pbp_2025 = pbp_2025.merge(
+            rd_goalies[["game_id", "event_id", "home_goalie", "away_goalie"]],
+            on=["game_id", "event_id"],
+            how="left",
+        )
+        filled = pbp_2025["home_goalie"].notna().sum()
+        print(f"  Filled {filled:,} / {len(pbp_2025):,} goalie entries", file=sys.stderr)
+
     pbp = pd.concat([pbp, pbp_2025], ignore_index=True)
     print(f"  Appended {len(pbp_2025):,} rows from 2025-26", file=sys.stderr)
 
@@ -71,6 +94,17 @@ if os.path.exists("data/raw_pbp_2025.csv"):
         usecols=["event_goalie_name", "event_goalie_id"],
     )
     raw_goalie = pd.concat([raw_goalie, raw_goalie_2025], ignore_index=True)
+# Also pull goalie name→ID from shots_2025.csv (has goalieIdForShot + goalieNameForShot)
+if os.path.exists("data/shots_2025.csv"):
+    shots_goalie = pd.read_csv(
+        "data/shots_2025.csv",
+        usecols=["goalieIdForShot", "goalieNameForShot"],
+    ).dropna().drop_duplicates()
+    # Convert "First Last" → "First.Last" to match raw_pbp format
+    shots_goalie["event_goalie_name"] = shots_goalie["goalieNameForShot"].str.replace(" ", ".")
+    shots_goalie["event_goalie_id"] = shots_goalie["goalieIdForShot"].astype(int)
+    raw_goalie = pd.concat([raw_goalie, shots_goalie[["event_goalie_name", "event_goalie_id"]]], ignore_index=True)
+    print(f"  Added {len(shots_goalie)} goalie mappings from shots_2025.csv", file=sys.stderr)
 raw_goalie = raw_goalie.dropna().drop_duplicates()
 raw_goalie["event_goalie_id"] = raw_goalie["event_goalie_id"].astype(int)
 goalie_name_to_id = (

@@ -146,6 +146,114 @@ season = rapm_s.copy()
 season = season.merge(sit_toi, on=["player_id", "season"], how="left")
 season = season.merge(pp, on="player_id", how="left")
 
+# ── Blend per-season RAPM with pooled RAPM ────────────────────────────────
+# Per-season RAPM uses the same ridge alpha as pooled (~10x more data), making
+# single-season estimates over-regularized and noisy. Blend toward the more
+# stable pooled career estimate, weighted by per-season 5v5 TOI.
+#   blended = season_weight * per_season + (1 - season_weight) * pooled
+#   season_weight = toi_5v5 / (toi_5v5 + BLEND_K)
+# At k=800, a typical starter (800 min) gets 50% season / 50% pooled.
+BLEND_K = 800  # minutes 5v5
+blend_cols = ["xGF_O", "xGF_D", "GF_O", "GF_D", "SOG_O", "SOG_D",
+              "TO_O", "TO_D", "GA_O", "GA_D", "BPR_O", "BPR_D", "BPR"]
+
+# Merge pooled values with _pool suffix
+pooled_for_blend = rapm_p[["player_id"] + blend_cols].copy()
+pooled_for_blend = pooled_for_blend.rename(columns={c: f"{c}_pool" for c in blend_cols})
+season = season.merge(pooled_for_blend, on="player_id", how="left")
+
+toi_blend = season["toi_5v5"].fillna(0).values
+season_weight = toi_blend / (toi_blend + BLEND_K)
+season["blend_weight"] = season_weight.round(3)
+
+for col in blend_cols:
+    pool_col = f"{col}_pool"
+    s_vals = season[col].fillna(0).values
+    p_vals = season[pool_col].fillna(0).values
+    season[col] = (season_weight * s_vals + (1 - season_weight) * p_vals).round(4)
+    season = season.drop(columns=[pool_col])
+
+print(f"\n  Per-season blending: k={BLEND_K}, median blend_weight={season['blend_weight'].median():.2f}", file=sys.stderr)
+
+# ── Hybrid: blend RAPM with on-ice/off-ice relative rates ─────────────────
+# RAPM controls for teammates/competition but compresses star players via ridge.
+# Relative xGF/60 (on-ice minus off-ice) preserves magnitude but conflates
+# player skill with deployment. Blending gets the best of both.
+print("\n  Computing on-ice/off-ice relative rates...", file=sys.stderr)
+
+rel_cols = ["playerId", "season", "situation", "icetime",
+            "OnIce_F_xGoals", "OnIce_A_xGoals",
+            "OffIce_F_xGoals", "OffIce_A_xGoals"]
+rel_sbg = pd.read_csv(SKATERS_GAME, usecols=rel_cols)
+rel_sbg = rel_sbg.rename(columns={"playerId": "player_id"})
+rel_5v5 = rel_sbg[rel_sbg["situation"] == "5on5"].copy()
+
+rel_agg = rel_5v5.groupby(["player_id", "season"]).agg(
+    toi_sec=("icetime", "sum"),
+    on_xgf=("OnIce_F_xGoals", "sum"),
+    on_xga=("OnIce_A_xGoals", "sum"),
+    off_xgf=("OffIce_F_xGoals", "sum"),
+    off_xga=("OffIce_A_xGoals", "sum"),
+).reset_index()
+
+toi_min = rel_agg["toi_sec"] / 60
+toi_hrs = toi_min / 60
+
+# On-ice and off-ice per-60 rates
+rel_agg["on_xgf_60"] = np.where(toi_hrs > 0, rel_agg["on_xgf"] / toi_hrs, 0)
+rel_agg["on_xga_60"] = np.where(toi_hrs > 0, rel_agg["on_xga"] / toi_hrs, 0)
+# Off-ice: need off-ice TOI estimate. OffIce stats are team totals when player is OFF.
+# off_toi ≈ we don't have it directly, but we can compute per-60 from the raw counts
+# using on_ice_rate as calibration: off_xgf_60 ≈ off_xgf / off_toi_hrs
+# Approximate: team plays ~3400 min 5v5/season, player plays ~800, so off ≈ 2600
+# Better: use the ratio. For now, use the percentage columns.
+# Actually, simplest: rel = on_ice_rate - league_avg_rate (avoids needing off-ice TOI)
+# Even better: use on-ice xGF% vs off-ice xGF% which is already available
+
+# Simple approach: relative xGF/60 = on-ice xGF/60 - league average xGF/60
+lg_xgf_60 = rel_agg.loc[toi_min >= 200, "on_xgf_60"].mean()
+lg_xga_60 = rel_agg.loc[toi_min >= 200, "on_xga_60"].mean()
+rel_agg["rel_xgf_60"] = rel_agg["on_xgf_60"] - lg_xgf_60
+rel_agg["rel_xga_60"] = -(rel_agg["on_xga_60"] - lg_xga_60)  # flip: positive = good defense
+rel_agg["toi_min"] = toi_min
+
+# Scale relative rates to RAPM coefficient scale.
+# RAPM xGF_O std ≈ 0.07, relative xGF/60 std ≈ 0.38. Scale factor ≈ 0.07/0.38 ≈ 0.18
+# But we WANT the wider spread — the whole point is to un-compress star players.
+# So don't rescale; instead blend at the xGF_O level with appropriate weights.
+# The blend ratio determines how much of the wider spread we retain.
+RAPM_WEIGHT = 0.5  # 50% RAPM (compressed but clean), 50% relative (wide but noisy)
+
+season = season.merge(
+    rel_agg[["player_id", "season", "rel_xgf_60", "rel_xga_60", "toi_min"]].rename(
+        columns={"toi_min": "rel_toi_min"}),
+    on=["player_id", "season"], how="left"
+)
+
+# Blend xGF_O and xGF_D with relative rates
+rapm_xgf_o = season["xGF_O"].values.copy()
+rapm_xgf_d = season["xGF_D"].values.copy()
+rel_o = season["rel_xgf_60"].fillna(0).values
+rel_d = season["rel_xga_60"].fillna(0).values
+
+season["xGF_O"] = (RAPM_WEIGHT * rapm_xgf_o + (1 - RAPM_WEIGHT) * rel_o).round(4)
+season["xGF_D"] = (RAPM_WEIGHT * rapm_xgf_d + (1 - RAPM_WEIGHT) * rel_d).round(4)
+
+# Update BPR_O/D to reflect the hybrid (these feed into downstream composites)
+# BPR = weighted sum of all metrics; we only changed xGF, so adjust BPR accordingly
+# delta_O = new_xGF_O - old_xGF_O; BPR_O += delta_O * hand_coded_xGF_weight
+# But with learned weights this gets complicated. Just recompute BPR from scratch.
+# Actually, BPR is only used for display/diagnostics — gar.py recomputes xEV_O from
+# individual metrics. So no need to update BPR here.
+
+season = season.drop(columns=["rel_xgf_60", "rel_xga_60", "rel_toi_min"], errors="ignore")
+
+qual_mask = season["toi_5v5"].fillna(0) >= 200
+print(f"  Hybrid blend: RAPM weight={RAPM_WEIGHT}, "
+      f"lg xGF/60={lg_xgf_60:.2f}, lg xGA/60={lg_xga_60:.2f}", file=sys.stderr)
+print(f"  Post-hybrid xGF_O std: {season.loc[qual_mask, 'xGF_O'].std():.4f} "
+      f"(was RAPM-only: {rapm_xgf_o[qual_mask.values].std():.4f})", file=sys.stderr)
+
 # Diagnostic shifts
 if "prior_O" in season.columns:
     season["rapm_shift_O"] = (season["BPR_O"] - season["prior_O"]).round(4)

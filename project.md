@@ -111,15 +111,27 @@ Run scripts: `bash run_all.sh` (v1) or `bash run_all_v2.sh` (v2 Bayesian pipelin
 
 The regression coefficient for each player represents their per-event contribution to the outcome, controlling for every other player on the ice simultaneously. Ridge regularization (L2 penalty) handles the multicollinearity that arises when linemates always play together.
 
-The outcome variable is **expected goals (xGoal)** from MoneyPuck's shot model, supplemented with shots on goal, actual goals, turnovers, and giveaways. These are combined into composite **BPR_O** and **BPR_D** components:
+The outcome variable is **expected goals (xGoal)** from MoneyPuck's shot model, supplemented with shots on goal, actual goals, turnovers, and giveaways. These are combined into composite **BPR_O** and **BPR_D** components using **learned weights** (LOSO Ridge CV, R²=0.1545 for offense):
 
 ```
-BPR_O = 0.50 × xGF_O + 0.22 × SOG_O + 0.15 × GF_O + 0.06 × TO_O − 0.04 × GA_O
-BPR_D = 0.50 × xGF_D + 0.22 × SOG_D + 0.15 × GF_D + 0.06 × TO_D − 0.04 × GA_D
+BPR_O = 1.74 × xGF_O + 0.12 × SOG_O + 0.12 × GF_O + 0.14 × TO_O + 0.08 × GA_O + 1.96 × iFinish
+BPR_D = 0.80 × xGF_D + 0.20 × GF_D   (TO/SOG/GA zeroed — low R², zone-usage confounds)
 BPR   = BPR_O + BPR_D
 ```
 
 Values are expressed in **per-60-minute** units (scaled by `EVENTS_PER_60 = 90`), so ratings can be compared across players with different ice time.
+
+### Adaptive Ridge Regularization
+
+Standard ridge applies the same penalty to all players, which over-shrinks stars (who have ample data) and under-shrinks fringe players (who have little). Adaptive ridge scales each player's regularization inversely with their event count:
+
+```
+effective_alpha_i = alpha * (n_ref / n_events_i)
+```
+
+Implemented via a column-scaling trick: multiply each player's design matrix columns by `sqrt(n_events_i / n_ref)`. High-TOI stars get ~2× less regularization than the median player. Scale range is clamped to [0.30, 3.00] with `n_ref = 2,112` (median skater event count).
+
+This improved offensive LOSO R² from 0.1345 → 0.1545 and EVO correlation with HockeyStats from ~0.75 → 0.84.
 
 ### Two-Pass Quality Adjustment
 
@@ -240,18 +252,18 @@ Each game updates the posterior: `posterior = (prior_precision × prior + eviden
 
 ## Step 7: GAR/WAR (`gar.py`, `composite_v4.py`)
 
-Goals Above Replacement / Wins Above Replacement, with 8 skater components:
+Goals Above Replacement / Wins Above Replacement, with 8 skater components + goalie WAR:
 
-| Component | Description |
-|-----------|-------------|
-| xEV_O | Even-strength offensive (expected) |
-| xEV_D | Even-strength defensive (expected) |
-| FINISH_O | Offensive finishing above expected |
-| FINISH_D | Defensive finishing suppression |
-| PP | Power play value |
-| PK | Penalty kill value |
-| PEN | Penalty drawing value |
-| FO | Faceoff wins → goal value |
+| Component | % of |GAR| | Description |
+|-----------|-----------|-------------|
+| xEV_O | 26.0% | Even-strength offensive (expected) |
+| xEV_D | 9.9% | Even-strength defensive (expected) |
+| FINISH_O | 28.7% | Offensive finishing above expected (includes PP finishing) |
+| FINISH_D | 13.8% | Defensive finishing suppression |
+| PP | 6.5% | Power play value |
+| PK | 0.8% | Penalty kill value |
+| PEN | 13.4% | Penalty drawing value |
+| FO | 0.8% | Faceoff wins → goal value |
 
 ```
 xGAR = xEV_O + xEV_D + PP + PK + PEN + FO
@@ -260,6 +272,25 @@ WAR  = GAR / 6.0    (goals → wins)
 ```
 
 Position-specific replacement levels at the 17th percentile.
+
+### Individual Finishing (iFinish)
+
+Individual finishing talent (goals minus expected goals, per 60) is Bayesian-shrunk with `k = 80` (capped from the statistically optimal k=312 to avoid over-shrinking for current-season valuation). The shrunk iFinish is multiplied by learned weight W_iFIN=1.96 and added to the FINISH_O component.
+
+### PP Finishing
+
+PP goals minus PP expected goals is added as a counting stat to FINISH_O_GAR, capturing individual PP finishing talent that 5v5-only iFinish misses.
+
+### Goalie WAR (GSAx)
+
+Goalie WAR uses **Goals Saved Above Expected (GSAx)** computed from event-level shot data:
+
+1. For each shot, identify the facing goalie and the shot's xGoal
+2. Aggregate per goalie-season: shots faced, goals against, xGA
+3. `GSAx = xGA - goals_against` (positive = saved more than expected)
+4. League-normalize per season to remove xG model bias
+5. Replacement level at 25th percentile of starters (1,000+ shots faced)
+6. `GOALIE_WAR = (GSAx_adj - replacement_level) / 6.0`
 
 ---
 
@@ -351,6 +382,21 @@ Predictive validity was measured via year-over-year r² (how well season N predi
 | `output/v2_gar_by_season.csv` | Component-level GAR (8 skater components) per season |
 | `output/v2_gar_pooled.csv` | Career-pooled GAR/WAR |
 
+### Goalie Outputs
+
+| File | Description |
+|------|-------------|
+| `output/v2_goalie_war_by_season.csv` | Per-season goalie WAR (1,027 goalie-seasons, GSAx-based) |
+| `output/v2_goalie_war.csv` | Career-pooled goalie WAR (238 goalies) |
+
+### Dashboard Outputs
+
+| File | Description |
+|------|-------------|
+| `output/dashboard_skater_war.csv` | Dashboard-ready skater WAR (9,811 rows, 39 cols: WAR components + box score stats + team + GP) |
+| `output/dashboard_goalie_war.csv` | Dashboard-ready goalie WAR (1,027 rows: GSAx, sv%, shots faced) |
+| `output/dashboard_combined_war.csv` | Combined skater+goalie leaderboard on one WAR scale (10,838 rows) |
+
 ### Other Outputs
 
 | File | Description |
@@ -402,6 +448,31 @@ Predictive validity was measured via year-over-year r² (how well season N predi
 
 ---
 
+## Validation
+
+### GAR/WAR Validation
+- **Team wins prediction:** Skater WAR R²=0.277, adding Goalie WAR R²=0.389
+- **YoY player WAR stability:** r=0.585 (F: 0.609, D: 0.519)
+- **Component YoY stability:** FO (0.71), PK (0.90), xEV_O (0.56), PP (0.48), FINISH_O (0.36), FINISH_D (0.09)
+- **No position bias:** F mean WAR=1.34, D mean WAR=1.28
+
+### Comparison to HockeyStats WAR (2024-25 season)
+- **WAR correlation:** 0.778
+- **EVO correlation:** 0.840 (near-zero bias — well calibrated)
+- **Shoot correlation:** 0.853 (mean delta -0.43, structural xG model difference)
+- **Overall mean delta:** +0.63 WAR (ours runs slightly higher)
+
+| Player | Ours | HockeyStats | Δ |
+|--------|------|-------------|---|
+| MacKinnon | 6.53 | 6.86 | -0.33 |
+| Draisaitl | 6.18 | 5.35 | +0.83 |
+| McDavid | 6.92 | 5.05 | +1.87 |
+| Kucherov | 6.14 | 4.93 | +1.21 |
+| Robertson | 4.95 | 4.78 | +0.17 |
+| Caufield | 4.62 | 4.51 | +0.11 |
+
+---
+
 ## Known Limitations
 
 **Defensive prediction ceiling:** Defensive value is inherently harder to isolate and predict than offensive value. CF_D (r²=0.864) is strong but benefits heavily from carry-forward smoothing — the raw defensive composite (0.746) is more volatile than offense.
@@ -410,7 +481,9 @@ Predictive validity was measured via year-over-year r² (how well season N predi
 
 **Per-season RAPM is noisy:** Raw per-season BPR has an r² of just 0.008 year-over-year — essentially noise. This is why the carry-forward and rolling windows are critical. Single-season RAPM should not be used as a standalone metric.
 
-**No goalie adjustment:** RAPM implicitly controls for goalies (they appear in every event), but goalie quality isn't separately modeled in the composite. Skater defensive ratings partially reflect goalie quality.
+**FINISH_D is noisy:** YoY r=0.09 — essentially random. Candidate for removal or rework.
+
+**Shoot WAR gap:** Our Shoot WAR averages ~0.43 lower than HockeyStats, attributed to differences in the underlying xG model (MoneyPuck vs whatever HS uses). An optimal scale factor of ~1.45× suggests HS's xG model is more conservative.
 
 **First-season players:** Players in their first season have a prior of league average (0), so their carry-forward is entirely driven by current-season data. Draft position or junior stats could improve first-year priors.
 

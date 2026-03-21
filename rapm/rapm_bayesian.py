@@ -39,6 +39,7 @@ ALPHA_CANDIDATES = [100, 500, 1000, 5000, 10_000, 50_000]
 STRENGTH_FILTER  = "5v5"  # matches strength_state column
 DECAY_LAMBDA     = 0.3
 EVENTS_PER_60    = 90.0
+ADAPTIVE_RIDGE   = True   # Scale regularization inversely with player event count
 
 METRICS = {
     "xGF": "xGoal",
@@ -278,6 +279,69 @@ def build_design_matrix(frame, skater_ids, skater_idx, goalie_list, goalie_idx,
 
     return X
 
+# ── Adaptive ridge scaling ────────────────────────────────────────────────────
+
+def compute_adaptive_scaling(X, skater_ids, goalie_list_arg):
+    """
+    Compute per-column scaling factors for adaptive ridge regularization.
+
+    The standard ridge penalty α*||β||² applies the same shrinkage to all players.
+    Players with more events have more data, so their coefficients are more reliable
+    and should be shrunk less. Adaptive ridge achieves this by scaling each player's
+    columns by sqrt(n_events_i / n_ref), making the effective penalty:
+        α_effective_i = α * (n_ref / n_events_i)
+
+    This is equivalent to a diagonal penalty matrix Λ where Λ_ii = α / n_events_i.
+    """
+    n_skaters = len(skater_ids)
+    n_goalies = len(goalie_list_arg)
+    n_cols = X.shape[1]
+
+    # Count events per player column (sum of absolute values = number of events)
+    col_counts = np.array(np.abs(X).sum(axis=0)).flatten()
+
+    # Reference count: median of skater columns with ≥100 events
+    skater_counts = []
+    for i in range(n_skaters):
+        # Each skater has 2 columns (O, D) — use the max
+        n_o = col_counts[i * 2]
+        n_d = col_counts[i * 2 + 1]
+        n = max(n_o, n_d)
+        if n >= 100:
+            skater_counts.append(n)
+    n_ref = float(np.median(skater_counts)) if skater_counts else 1.0
+
+    # Build scaling vector: 1.0 for control columns, sqrt(n_i/n_ref) for player columns
+    scale = np.ones(n_cols, dtype=np.float64)
+    for i in range(n_skaters):
+        n_o = max(col_counts[i * 2], 1.0)
+        n_d = max(col_counts[i * 2 + 1], 1.0)
+        # Use the same scale for both O and D columns of a player
+        n_player = max(n_o, n_d)
+        s = np.sqrt(n_player / n_ref)
+        # Cap scaling to avoid extreme values for very high/low TOI players
+        s = np.clip(s, 0.3, 3.0)
+        scale[i * 2] = s
+        scale[i * 2 + 1] = s
+
+    # Also scale goalie columns
+    goalie_offset = n_skaters * 2
+    for gi in range(n_goalies):
+        n_g = max(col_counts[goalie_offset + gi], 1.0)
+        s = np.sqrt(n_g / n_ref)
+        s = np.clip(s, 0.3, 3.0)
+        scale[goalie_offset + gi] = s
+
+    return scale, n_ref
+
+
+def apply_adaptive_scaling(X, scale):
+    """Scale columns of sparse matrix X by the scaling vector."""
+    # Multiply each column by its scale factor
+    D = sparse.diags(scale)
+    return X.dot(D)
+
+
 # ── Fitting functions ────────────────────────────────────────────────────────
 
 def fit_rapm_raw(frame, X, skater_ids, goalie_list_arg, sample_weight=None):
@@ -288,13 +352,24 @@ def fit_rapm_raw(frame, X, skater_ids, goalie_list_arg, sample_weight=None):
     alphas         = {}
     goalie_offset  = len(skater_ids) * 2
 
+    # Adaptive ridge: scale columns so high-TOI players get less regularization
+    if ADAPTIVE_RIDGE:
+        ad_scale, n_ref = compute_adaptive_scaling(X, skater_ids, goalie_list_arg)
+        X_fit = apply_adaptive_scaling(X, ad_scale)
+        print(f"    Adaptive ridge: n_ref={n_ref:.0f} events, scale range=[{ad_scale[:goalie_offset].min():.2f}, {ad_scale[:goalie_offset].max():.2f}]", file=sys.stderr)
+    else:
+        X_fit = X
+        ad_scale = None
+
     for metric_name, y_col in METRICS.items():
         y = frame[y_col].fillna(0).astype(float).values
         model = RidgeCV(alphas=ALPHA_CANDIDATES, fit_intercept=True)
-        model.fit(X, y, **({"sample_weight": sample_weight} if sample_weight is not None else {}))
+        model.fit(X_fit, y, **({"sample_weight": sample_weight} if sample_weight is not None else {}))
 
         alpha = model.alpha_
-        coefs = model.coef_
+        # Recover original-scale coefficients: β_orig = β_scaled * scale
+        coefs_scaled = model.coef_
+        coefs = coefs_scaled * ad_scale if ad_scale is not None else coefs_scaled
         all_coefs[metric_name] = coefs
         alphas[metric_name] = float(alpha)
 
@@ -346,10 +421,18 @@ def fit_rapm_prior(frame, X, skater_ids, goalie_list_arg, prior_lookup, calibrat
     prior_sd_o_full = cal_O["prior_sd"] / EVENTS_PER_60
     prior_sd_d_full = cal_D["prior_sd"] / EVENTS_PER_60
 
+    # Adaptive ridge: scale columns so high-TOI players get less regularization
+    if ADAPTIVE_RIDGE:
+        ad_scale, n_ref = compute_adaptive_scaling(X, skater_ids, goalie_list_arg)
+        X_fit = apply_adaptive_scaling(X, ad_scale)
+    else:
+        X_fit = X
+        ad_scale = None
+
     for metric_name, y_col in METRICS.items():
         y = frame[y_col].fillna(0).astype(float).values
 
-        # Build prior mean vector
+        # Build prior mean vector (in original scale)
         mu = np.zeros(n_cols, dtype=np.float64)
         w_o = BPR_WEIGHTS[metric_name][0] / total_O_weight
         w_d = BPR_WEIGHTS[metric_name][1] / total_D_weight
@@ -366,15 +449,25 @@ def fit_rapm_prior(frame, X, skater_ids, goalie_list_arg, prior_lookup, calibrat
         else:
             # Fallback: run RidgeCV on unshifted data to get alpha
             cv_model = RidgeCV(alphas=ALPHA_CANDIDATES, fit_intercept=True)
-            cv_model.fit(X, y, **({"sample_weight": sample_weight} if sample_weight is not None else {}))
+            cv_model.fit(X_fit, y, **({"sample_weight": sample_weight} if sample_weight is not None else {}))
             alpha = cv_model.alpha_
 
-        # Shift target and fit with prior mean
+        # Shift target by prior mean (in original scale, then fit in scaled space)
         y_adj = y - X.dot(mu)
-        model = Ridge(alpha=alpha, fit_intercept=True)
-        model.fit(X, y_adj, **({"sample_weight": sample_weight} if sample_weight is not None else {}))
 
-        coefs = model.coef_ + mu
+        # Convert prior mean to scaled space for the fit
+        if ad_scale is not None:
+            mu_scaled = mu * ad_scale
+        else:
+            mu_scaled = mu
+
+        model = Ridge(alpha=alpha, fit_intercept=True)
+        model.fit(X_fit, y_adj, **({"sample_weight": sample_weight} if sample_weight is not None else {}))
+
+        # Recover original-scale coefficients
+        coefs_scaled = model.coef_
+        coefs_residual = coefs_scaled * ad_scale if ad_scale is not None else coefs_scaled
+        coefs = coefs_residual + mu
         all_coefs[metric_name] = coefs
 
         n_pos = int((y > 0).sum())
@@ -395,7 +488,7 @@ def fit_rapm_prior(frame, X, skater_ids, goalie_list_arg, prior_lookup, calibrat
             o    = float(coefs[i * 2])     * scale
             d    = float(coefs[i * 2 + 1]) * scale
 
-            # Posterior SE: 1/(n/sigma2 + 1/prior_var)
+            # Posterior SE: accounts for adaptive scaling (more events → lower SE)
             n_o = max(float(col_counts[i * 2]), 1.0)
             n_d = max(float(col_counts[i * 2 + 1]), 1.0)
             post_var_o = 1.0 / (n_o / sigma2 + 1.0 / max(prior_sd_o_m**2, 1e-10))
@@ -563,8 +656,9 @@ elif MODE == "prior":
         s_goalies = build_goalie_index(sf)
         s_goalie_idx = {gid: i for i, gid in enumerate(s_goalies)}
 
+        # No quality covariates for per-season (they absorb individual player signal)
         sX = build_design_matrix(sf, s_skaters, s_skater_idx, s_goalies, s_goalie_idx,
-                                  pass1_quality=pass1_quality)
+                                  pass1_quality=None)
         print(f"  {len(s_skaters)} skaters, {len(s_goalies)} goalies, "
               f"matrix {sX.shape[0]}×{sX.shape[1]}", file=sys.stderr)
 
@@ -580,10 +674,19 @@ elif MODE == "prior":
             elif pid in prior_lookup:
                 s_prior_lookup[pid] = prior_lookup[pid]
 
+        # Scale alpha proportionally to event count: pooled alpha was tuned on
+        # ~1.5M events; per-season has ~140K, so effective regularization would
+        # be ~10x too strong. Scale down to maintain comparable shrinkage.
+        n_pooled_events = len(df)
+        n_season_events = len(sf)
+        alpha_scale = n_season_events / n_pooled_events
+        scaled_alphas = {k: v * alpha_scale for k, v in raw_alphas.items()} if raw_alphas else None
+        print(f"  Alpha scale: {alpha_scale:.3f} (season {n_season_events:,} / pooled {n_pooled_events:,})", file=sys.stderr)
+
         s_results, _, _ = fit_rapm_prior(
             sf, sX, s_skaters, s_goalies,
             s_prior_lookup, calibration,
-            raw_alphas=raw_alphas,
+            raw_alphas=scaled_alphas,
         )
         s_df = results_to_df(s_results, season=season)
         s_df["prior_O"] = s_df["player_id"].map(lambda p: s_prior_lookup.get(p, (0, 0))[0]).round(4)

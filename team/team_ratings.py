@@ -37,8 +37,8 @@ PRIOR_COMPOSITE_COLS = ["composite_O", "composite_D", "PV_O", "PV_D",
 PRIOR_BPR_COLS = ["BPR_O", "BPR_D", "BPR", "total_BPR", "total_BPR_adj"]
 PRIOR_GAR_COLS = ["xEV_O", "xEV_D", "FINISH_O", "FINISH_D", "FO_GAR",
                   "WAR"]
-TRAIN_SEASONS = list(range(2015, 2022))   # 2015-2021 (daily ratings convention)
-TEST_SEASONS = [2022, 2023]               # 2022-23 + 2023-24 NHL seasons
+TRAIN_SEASONS = list(range(2015, 2024))   # 2015-2023 (daily ratings convention)
+TEST_SEASONS = [2024, 2025]               # 2024-25 + 2025-26 NHL seasons
 
 # Typical per-game TOI split (minutes) for weighting components
 TOI_5V5_PER_GAME = 50.0

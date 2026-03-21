@@ -6,7 +6,7 @@ Decomposes player value into 8 skater components + goalie WAR:
   Skater components (all in goals-above-average units):
     1. xEV_O   — EV offense (expected): shot generation, transition, territorial
     2. xEV_D   — EV defense (expected): shot suppression, defensive transition
-    3. FINISH_O — Offensive finishing (scoring above expected)
+    3. FINISH_O — Offensive finishing (RAPM on-ice + individual iFinish)
     4. FINISH_D — Defensive finishing (opponent finishing suppression)
     5. PP      — Power play contribution
     6. PK      — Penalty kill contribution
@@ -39,16 +39,56 @@ Outputs:
 """
 
 import sys
+import json
 import numpy as np
 import pandas as pd
 from pathlib import Path
 
-# ── BPR weights (must match rapm_v2.py) ──────────────────────────────────────
-W_xGF = 0.50
-W_SOG = 0.22
-W_GF  = 0.15
-W_TO  = 0.06
-W_GA  = -0.04
+# ── BPR weights: try learned, fall back to hand-coded ────────────────────────
+LEARNED_WEIGHTS_FILE = Path("output/learned_bpr_weights.json")
+IFINISH_FILE = Path("output/ifinish_by_season.csv")
+
+if LEARNED_WEIGHTS_FILE.exists():
+    with open(LEARNED_WEIGHTS_FILE) as f:
+        _lw = json.load(f)
+    _o = _lw["offense"]
+    # Offense: use learned weights (R²=0.068, meaningful signal)
+    W_xGF_O = _o.get("xGF_O", 0.50)
+    W_SOG_O = _o.get("SOG_O", 0.22)
+    W_GF_O  = _o.get("GF_O", 0.15)
+    W_TO_O  = _o.get("TO_O", 0.06)
+    W_GA_O  = _o.get("GA_O", -0.04)
+    W_iFIN  = _o.get("iFinish_shrunk", 0.0)
+    # Defense: simple blend (learned D weights have R²=0.022, too noisy to trust;
+    # TO_D/GA_D dominate due to wide coefficient spread, conflating zone usage with skill)
+    W_xGF_D = 0.80
+    W_SOG_D = 0.0
+    W_GF_D  = 0.20
+    W_TO_D  = 0.0
+    W_GA_D  = 0.0
+    USE_LEARNED = True
+    print(f"  Loaded learned offense weights from {LEARNED_WEIGHTS_FILE}", file=sys.stderr)
+    print(f"    Offense (learned): xGF={W_xGF_O:.4f} SOG={W_SOG_O:.4f} GF={W_GF_O:.4f} "
+          f"TO={W_TO_O:.4f} GA={W_GA_O:.4f} iFinish={W_iFIN:.4f}", file=sys.stderr)
+    print(f"    Defense (simple):  xGF={W_xGF_D:.2f} GF={W_GF_D:.2f} "
+          f"(TO/SOG/GA zeroed — low R², zone-usage confounds)", file=sys.stderr)
+else:
+    # Fall back to original hand-coded weights (symmetric O/D)
+    W_xGF_O = W_xGF_D = 0.50
+    W_SOG_O = W_SOG_D = 0.22
+    W_GF_O  = W_GF_D  = 0.15
+    W_TO_O  = W_TO_D  = 0.06
+    W_GA_O  = W_GA_D  = -0.04
+    W_iFIN  = 0.0
+    USE_LEARNED = False
+    print(f"  WARNING: {LEARNED_WEIGHTS_FILE} not found, using hand-coded BPR weights", file=sys.stderr)
+
+# Keep symmetric aliases for backward compatibility in decomposition check
+W_xGF = W_xGF_O
+W_SOG = W_SOG_O
+W_GF  = W_GF_O
+W_TO  = W_TO_O
+W_GA  = W_GA_O
 
 # ── Constants ────────────────────────────────────────────────────────────────
 GOAL_VALUE_PER_FO_WIN = 0.008       # conservative; literature 0.008–0.012
@@ -71,15 +111,37 @@ pp_rapm["player_id"] = pp_rapm["player_id"].astype(int)
 penalties = pd.read_csv("output/v2_penalties.csv")
 penalties["player_id"] = penalties["player_id"].astype(int)
 
-# Skaters by game (faceoffs, penalty counts, all-situations TOI)
+# Skaters by game (faceoffs, penalty counts, all-situations TOI, PP production)
 sbg_cols = ["playerId", "season", "situation", "icetime",
-            "faceoffsWon", "faceoffsLost", "penalties", "penaltiesDrawn"]
+            "faceoffsWon", "faceoffsLost", "penalties", "penaltiesDrawn",
+            "I_F_goals", "I_F_xGoals", "I_F_primaryAssists"]
 sbg = pd.read_csv("data/skaters_by_game.csv", usecols=sbg_cols)
 sbg = sbg.rename(columns={"playerId": "player_id"})
 
 print(f"  Pooled ratings: {len(pooled):,} players", file=sys.stderr)
 print(f"  By-season ratings: {len(by_season):,} player-seasons", file=sys.stderr)
 print(f"  Penalty events: {len(penalties):,}", file=sys.stderr)
+
+# Individual finishing (iFinish) — only if learned weights include it
+if IFINISH_FILE.exists() and W_iFIN != 0:
+    ifinish = pd.read_csv(IFINISH_FILE)
+    ifinish["player_id"] = ifinish["player_id"].astype(int)
+    # Pooled iFinish: TOI-weighted average of shrunk values (multi-year → shrinkage helps)
+    ifinish_pooled = ifinish.groupby("player_id").apply(
+        lambda g: pd.Series({
+            "iFinish_shrunk": np.average(g["iFinish_shrunk"], weights=g["toi_min"]) if g["toi_min"].sum() > 0 else 0,
+        })
+    ).reset_index()
+    # Per-season: use iFinish_per60 (raw rate) instead of shrunk for descriptive GAR.
+    # For current-season valuation, we credit what actually happened (no shrinkage).
+    # Convert per-60 rate to per-60-minute counting stat units (same as shrunk).
+    ifinish_by_season = ifinish[["player_id", "season", "iFinish_shrunk", "iFinish_per60"]].copy()
+    print(f"  iFinish loaded: {len(ifinish):,} player-seasons, W_iFIN={W_iFIN:.4f}", file=sys.stderr)
+    HAS_IFINISH = True
+else:
+    HAS_IFINISH = False
+    if W_iFIN != 0:
+        print(f"  WARNING: {IFINISH_FILE} not found but W_iFIN={W_iFIN} — iFinish disabled", file=sys.stderr)
 
 
 # ── 2. Derive league constants ───────────────────────────────────────────────
@@ -125,39 +187,85 @@ fo_season = sit_5v5.groupby(["player_id", "season"]).agg(
 # Pooled faceoffs
 fo_pooled = fo_season.groupby("player_id")[["fo_won", "fo_lost"]].sum().reset_index()
 
+# Per-season PP individual production (goals + xGoals + primary assists)
+sit_pp = sbg[sbg["situation"] == "5on4"].copy()
+pp_season = sit_pp.groupby(["player_id", "season"]).agg(
+    pp_toi=("icetime", "sum"),
+    pp_goals=("I_F_goals", "sum"),
+    pp_xgoals=("I_F_xGoals", "sum"),
+    pp_a1=("I_F_primaryAssists", "sum"),
+).reset_index()
+pp_season["pp_toi"] = pp_season["pp_toi"] / 60  # seconds → minutes
+# PP production: blend of goals (results) and xGoals (process) + primary assists
+# Convert to per-60, then subtract league average to get above-average rate
+pp_season["pp_prod"] = pp_season["pp_goals"] * 0.5 + pp_season["pp_xgoals"] * 0.5 + pp_season["pp_a1"]
+pp_toi_hrs = pp_season["pp_toi"] / 60
+pp_season["pp_prod_60"] = np.where(pp_toi_hrs > 0, pp_season["pp_prod"] / pp_toi_hrs, 0)
+# League average PP production per 60
+lg_pp_prod = pp_season[pp_season["pp_toi"] >= 50]["pp_prod_60"].mean()
+pp_season["pp_prod_aa_60"] = pp_season["pp_prod_60"] - lg_pp_prod
+# Scale: convert individual production above average to goal value
+# A PP goal ≈ 1 goal, a primary assist ≈ 0.5 goal credit (avoids double-counting with scorer)
+PP_GOAL_VALUE = 1.0 / 2.5  # normalize: (0.5*G + 0.5*xG + A1) → goal units
+pp_season["PP_rate"] = (pp_season["pp_prod_aa_60"] * PP_GOAL_VALUE).round(4)
+
+# PP finishing: individual PP goals - PP xGoals (counting stat, added to FINISH_O_GAR)
+# This captures finishing talent on the power play that iFinish (5v5 only) misses
+pp_season["pp_finish"] = pp_season["pp_goals"] - pp_season["pp_xgoals"]
+
+# PK: use per-season on-ice goals against rate (from skaters_by_game)
+sit_pk = sbg[sbg["situation"] == "4on5"].copy()
+pk_season = sit_pk.groupby(["player_id", "season"]).agg(
+    pk_toi=("icetime", "sum"),
+).reset_index()
+pk_season["pk_toi"] = pk_season["pk_toi"] / 60
+
+# Pooled PP/PK
+pp_pooled = pp_season.groupby("player_id").agg(
+    pp_toi=("pp_toi", "sum"), pp_prod=("pp_prod", "sum"),
+    pp_goals_total=("pp_goals", "sum"), pp_xgoals_total=("pp_xgoals", "sum"),
+).reset_index()
+pp_pooled_hrs = pp_pooled["pp_toi"] / 60
+pp_pooled["pp_prod_60"] = np.where(pp_pooled_hrs > 0, pp_pooled["pp_prod"] / pp_pooled_hrs, 0)
+pp_pooled["PP_rate"] = ((pp_pooled["pp_prod_60"] - lg_pp_prod) * PP_GOAL_VALUE).round(4)
+pp_pooled["pp_finish"] = pp_pooled["pp_goals_total"] - pp_pooled["pp_xgoals_total"]
+
+print(f"  PP production: lg avg={lg_pp_prod:.2f}/60, {len(pp_season):,} player-seasons", file=sys.stderr)
+
 
 # ── 3. Compute EV components ────────────────────────────────────────────────
 def compute_ev_components(df):
-    """Decompose BPR into xEV and FINISH components using per-metric RAPM coefficients."""
-    # xEV_O = xGF_O*0.50 + SOG_O*0.22 + TO_O*0.06 + GA_O*(-0.04)
+    """Decompose per-metric RAPM into xEV and FINISH using learned (or hand-coded) weights."""
     df["xEV_O"] = (
-        df["xGF_O"] * W_xGF +
-        df["SOG_O"] * W_SOG +
-        df["TO_O"]  * W_TO  +
-        df["GA_O"]  * W_GA
+        df["xGF_O"] * W_xGF_O +
+        df["SOG_O"] * W_SOG_O +
+        df["TO_O"]  * W_TO_O  +
+        df["GA_O"]  * W_GA_O
     ).round(4)
 
-    # xEV_D = xGF_D*0.50 + SOG_D*0.22 + TO_D*0.06 + GA_D*(-0.04)
     df["xEV_D"] = (
-        df["xGF_D"] * W_xGF +
-        df["SOG_D"] * W_SOG +
-        df["TO_D"]  * W_TO  +
-        df["GA_D"]  * W_GA
+        df["xGF_D"] * W_xGF_D +
+        df["SOG_D"] * W_SOG_D +
+        df["TO_D"]  * W_TO_D  +
+        df["GA_D"]  * W_GA_D
     ).round(4)
 
-    # FINISH = GF * 0.15
-    df["FINISH_O"] = (df["GF_O"] * W_GF).round(4)
-    df["FINISH_D"] = (df["GF_D"] * W_GF).round(4)
+    # FINISH_O: RAPM finishing only here; iFinish blended in after merge in build_gar()
+    df["FINISH_O_rapm"] = (df["GF_O"] * W_GF_O).round(4)
+    df["FINISH_D"] = (df["GF_D"] * W_GF_D).round(4)
 
-    # Verification: xEV + FINISH should equal BPR
-    df["_check_O"] = (df["xEV_O"] + df["FINISH_O"] - df["BPR_O"]).abs()
-    df["_check_D"] = (df["xEV_D"] + df["FINISH_D"] - df["BPR_D"]).abs()
-    max_err = max(df["_check_O"].max(), df["_check_D"].max())
-    if max_err > 0.002:
-        print(f"  WARNING: xEV+FINISH != BPR, max error = {max_err:.4f}", file=sys.stderr)
+    if not USE_LEARNED:
+        # Verification only valid with original hand-coded symmetric weights
+        df["_check_O"] = (df["xEV_O"] + df["FINISH_O"] - df["BPR_O"]).abs()
+        df["_check_D"] = (df["xEV_D"] + df["FINISH_D"] - df["BPR_D"]).abs()
+        max_err = max(df["_check_O"].max(), df["_check_D"].max())
+        if max_err > 0.002:
+            print(f"  WARNING: xEV+FINISH != BPR, max error = {max_err:.4f}", file=sys.stderr)
+        else:
+            print(f"  Component decomposition verified (max error {max_err:.6f})", file=sys.stderr)
+        df = df.drop(columns=["_check_O", "_check_D"])
     else:
-        print(f"  Component decomposition verified (max error {max_err:.6f})", file=sys.stderr)
-    df = df.drop(columns=["_check_O", "_check_D"])
+        print(f"  Using learned weights (O/D asymmetric) — BPR verification skipped", file=sys.stderr)
 
     return df
 
@@ -209,10 +317,31 @@ def build_gar(df, pen_data, fo_data, pp_data, is_pooled=False):
 
     toi_5v5 = df["toi_5v5"].fillna(0).values
 
+    # --- Blend iFinish into FINISH_O (RAPM finishing + individual finishing) ---
+    if HAS_IFINISH:
+        ifin_data = ifinish_pooled if is_pooled else ifinish_by_season
+        ifin_merge = ["player_id"] if is_pooled else ["player_id", "season"]
+        df = df.merge(ifin_data[ifin_merge + ["iFinish_shrunk"]], on=ifin_merge, how="left")
+        df["iFinish_shrunk"] = df["iFinish_shrunk"].fillna(0)
+        df["FINISH_O"] = (df["FINISH_O_rapm"] + W_iFIN * df["iFinish_shrunk"]).round(4)
+    else:
+        df["FINISH_O"] = df["FINISH_O_rapm"]
+
+    # --- Add PP finishing (individual PP goals - PP xGoals) to FINISH_O ---
+    if is_pooled:
+        pp_fin_data = pp_pooled[["player_id", "pp_finish"]].copy()
+        pp_fin_merge = ["player_id"]
+    else:
+        pp_fin_data = pp_season[["player_id", "season", "pp_finish"]].copy()
+        pp_fin_merge = ["player_id", "season"]
+    df = df.merge(pp_fin_data, on=pp_fin_merge, how="left")
+    df["pp_finish"] = df["pp_finish"].fillna(0)
+
     # Convert rates to counting stats (goals above average)
     df["xEV_O_GAR"] = (df["xEV_O"] * toi_5v5 / 60).round(2)
     df["xEV_D_GAR"] = (df["xEV_D"] * toi_5v5 / 60).round(2)
-    df["FINISH_O_GAR"] = (df["FINISH_O"] * toi_5v5 / 60).round(2)
+    # FINISH_O_GAR = 5v5 finishing (RAPM + iFinish) + PP finishing (counting stat)
+    df["FINISH_O_GAR"] = (df["FINISH_O"] * toi_5v5 / 60 + df["pp_finish"]).round(2)
     df["FINISH_D_GAR"] = (df["FINISH_D"] * toi_5v5 / 60).round(2)
 
     # Convenience: total EV offense/defense
@@ -220,15 +349,27 @@ def build_gar(df, pen_data, fo_data, pp_data, is_pooled=False):
     df["EV_D_GAR"] = (df["xEV_D_GAR"] + df["FINISH_D_GAR"]).round(2)
 
     # --- PP/PK components ---
-    # PP/PK is pooled career data, so always merge on player_id only
-    if "PP_O" not in df.columns:
-        df = df.merge(pp_data, on="player_id", how="left")
-
     toi_pp = df["toi_pp"].fillna(0).values
     toi_pk = df["toi_pk"].fillna(0).values
 
-    df["PP_GAR"] = (df["PP_O"].fillna(0) * toi_pp / 60).round(2)
-    df["PK_GAR"] = (df["PK_D"].fillna(0) * toi_pk / 60).round(2)
+    if is_pooled:
+        # Pooled: use per-season PP production aggregated, with RAPM PK_D as fallback
+        pp_merge_data = pp_pooled[["player_id", "PP_rate"]].copy()
+        df = df.merge(pp_merge_data, on="player_id", how="left")
+        df["PP_GAR"] = (df["PP_rate"].fillna(0) * toi_pp / 60).round(2)
+        # PK: still use pooled RAPM (no per-season PK production data)
+        if "PK_D" not in df.columns:
+            df = df.merge(pp_data[["player_id", "PK_D"]], on="player_id", how="left")
+        df["PK_GAR"] = (df["PK_D"].fillna(0) * toi_pk / 60).round(2)
+    else:
+        # Per-season: use per-season PP production rates
+        pp_merge_data = pp_season[["player_id", "season", "PP_rate"]].copy()
+        df = df.merge(pp_merge_data, on=["player_id", "season"], how="left")
+        df["PP_GAR"] = (df["PP_rate"].fillna(0) * toi_pp / 60).round(2)
+        # PK: use pooled RAPM PK_D (no per-season PK model)
+        if "PK_D" not in df.columns:
+            df = df.merge(pp_data[["player_id", "PK_D"]], on="player_id", how="left")
+        df["PK_GAR"] = (df["PK_D"].fillna(0) * toi_pk / 60).round(2)
 
     # --- Penalty component ---
     if is_pooled:
@@ -384,82 +525,126 @@ recent = season_out[season_out["season"] >= 2022].sort_values("WAR", ascending=F
 print(recent.head(20)[["season"] + show_cols].to_string(index=False), file=sys.stderr)
 
 
-# ── 8. Goalie WAR ───────────────────────────────────────────────────────────
-goalie_file = Path("output/v2_goalie_rapm.csv")
-if goalie_file.exists():
-    print("\n── Computing goalie WAR ──", file=sys.stderr)
-    g = pd.read_csv(goalie_file)
-    g["goalie_id"] = g["goalie_id"].astype(int)
+# ── 8. Goalie WAR (GSAx-based) ──────────────────────────────────────────────
+print("\n── Computing goalie WAR ──", file=sys.stderr)
+print("  Building GSAx from event-level data (all strengths)...", file=sys.stderr)
 
-    # Goalie coefficients: home_goalie = +1 in design matrix.
-    # Negative xGF_G = fewer goals when this goalie plays at home = GOOD goalie
-    # (suppresses overall shot/goal events — captures both save ability and team effects)
-    # So: goalie_rate = -coef (flip sign so positive = good)
-    # Blend process (xGF) and results (GF)
-    has_xgf = "xGF_G" in g.columns
-    has_gf = "GF_G" in g.columns
+# Load shots from clean PBP — all strengths, not just 5v5
+pbp_goalie = pd.read_csv("output/v2_clean_pbp.csv",
+    usecols=["season", "event_team_type", "home_goalie_id", "away_goalie_id",
+             "xGoal", "is_goal", "is_shot_on_goal"])
 
-    if has_xgf and has_gf:
-        g["goalie_rate"] = -(g["xGF_G"] * 0.60 + g["GF_G"] * 0.40)
-    elif has_xgf:
-        g["goalie_rate"] = -g["xGF_G"]
-    elif has_gf:
-        g["goalie_rate"] = -g["GF_G"]
-    else:
-        print("  WARNING: No xGF_G or GF_G columns in goalie RAPM, skipping", file=sys.stderr)
-        g = None
+shots = pbp_goalie[pbp_goalie["is_shot_on_goal"] == 1].copy()
 
-    # CAVEAT: Goalie coefficients use fixed home(+1)/away(-1) encoding, not
-    # relative to acting team. This conflates goalie save ability with team-level
-    # shot environment. These ratings are EXPERIMENTAL — a proper goalie model
-    # would encode defending_goalie relative to the shooting team.
-    print("  NOTE: Goalie WAR is experimental (home/away encoding limitation)", file=sys.stderr)
+# Determine which goalie faced the shot (defending goalie)
+shots["facing_goalie"] = np.where(
+    shots["event_team_type"] == "home",
+    shots["away_goalie_id"],   # home team shoots → away goalie defends
+    shots["home_goalie_id"],   # away team shoots → home goalie defends
+)
+shots = shots[shots["facing_goalie"].notna()].copy()
+shots["facing_goalie"] = shots["facing_goalie"].astype(int)
+print(f"  {len(shots):,} shots with valid goalie ID", file=sys.stderr)
 
-    if g is not None:
-        # Goalie TOI from skaters_by_game (goalies won't be there) — use raw_pbp instead
-        # For now, estimate goalie TOI from the number of events they appeared in
-        # Actually, use the MoneyPuck goalie data or approximate from 5v5 events
-        # Simple approach: use the magnitude of the coefficient as a proxy for reliability
+# Aggregate per goalie-season: shots, goals against, expected goals against
+goalie_season = shots.groupby(["facing_goalie", "season"]).agg(
+    shots_faced=("is_goal", "count"),
+    goals_against=("is_goal", "sum"),
+    xGA=("xGoal", "sum"),
+).reset_index()
+goalie_season["saves"] = goalie_season["shots_faced"] - goalie_season["goals_against"]
+goalie_season["sv_pct"] = goalie_season["saves"] / goalie_season["shots_faced"]
 
-        # Replacement level: ~30th percentile of goalie rates
-        goalie_rl = float(np.percentile(g["goalie_rate"], 30))
-        print(f"  Goalie replacement level: {goalie_rl:.4f}", file=sys.stderr)
+# GSAx = xGA - GA (positive = saved more than expected)
+goalie_season["GSAx"] = goalie_season["xGA"] - goalie_season["goals_against"]
 
-        g["goalie_rate_above_repl"] = g["goalie_rate"] - goalie_rl
+# Normalize GSAx relative to league-average per season
+# The raw xGoal model may be biased, so subtract the league-average GSAx/shot rate
+for s in goalie_season["season"].unique():
+    mask = goalie_season["season"] == s
+    season_shots = goalie_season.loc[mask, "shots_faced"].sum()
+    season_gsax = goalie_season.loc[mask, "GSAx"].sum()
+    lg_gsax_per_shot = season_gsax / season_shots if season_shots > 0 else 0
+    goalie_season.loc[mask, "GSAx_adj"] = (
+        goalie_season.loc[mask, "GSAx"] - lg_gsax_per_shot * goalie_season.loc[mask, "shots_faced"]
+    )
 
-        # Estimate goalie TOI: goalies with more events get more reliable estimates
-        # Use a fixed TOI estimate based on NHL average (~2500 min/season, pooled over multiple seasons)
-        # Better: count events from v2_clean_pbp where this goalie appeared
-        # For now, use a uniform estimate (the RAPM coefficient IS per-60, so multiply by estimated TOI)
-        # We'll refine this with actual goalie TOI later
-        # Average starter: ~1500 min 5v5 per season × ~10 seasons in data ≈ 10,000-15,000 min pooled
-        # But we should estimate per goalie. Use the design matrix event counts as proxy.
+# Pooled goalie stats (across all seasons)
+goalie_pooled = goalie_season.groupby("facing_goalie").agg(
+    total_shots=("shots_faced", "sum"),
+    total_ga=("goals_against", "sum"),
+    total_xGA=("xGA", "sum"),
+    total_GSAx_adj=("GSAx_adj", "sum"),
+    seasons_played=("season", "nunique"),
+).reset_index()
+goalie_pooled["total_sv_pct"] = 1 - goalie_pooled["total_ga"] / goalie_pooled["total_shots"]
 
-        # Rough approach: assume coefficients are per-event rates scaled to per-60
-        # The RAPM coefficients are already in "goals per 60" units
-        # GAR = rate_above_repl * estimated_toi / 60
-        # Without actual goalie TOI, report rate-based metrics only
-        g["GOALIE_GAR_per60"] = g["goalie_rate_above_repl"].round(4)
-        g["GOALIE_WAR_per60"] = (g["GOALIE_GAR_per60"] / GOALS_TO_WINS).round(4)
+# Get goalie names from raw PBP + shots_2025 (covers newer goalies)
+goalie_names = pd.concat([
+    pd.read_csv("data/raw_pbp.csv", usecols=["event_goalie_id", "event_goalie_name"]).dropna(),
+    pd.read_csv("data/raw_pbp_2025.csv", usecols=["event_goalie_id", "event_goalie_name"]).dropna(),
+]).drop_duplicates("event_goalie_id")
+# Also pull from shots_2025.csv for goalies not in raw_pbp
+if Path("data/shots_2025.csv").exists():
+    shots_goalies = pd.read_csv("data/shots_2025.csv",
+        usecols=["goalieIdForShot", "goalieNameForShot"]).dropna().drop_duplicates()
+    shots_goalies = shots_goalies.rename(columns={
+        "goalieIdForShot": "event_goalie_id",
+        "goalieNameForShot": "event_goalie_name",
+    })
+    shots_goalies["event_goalie_name"] = shots_goalies["event_goalie_name"].str.replace(" ", ".")
+    goalie_names = pd.concat([goalie_names, shots_goalies]).drop_duplicates("event_goalie_id")
+goalie_names["event_goalie_id"] = goalie_names["event_goalie_id"].astype(int)
+goalie_pooled = goalie_pooled.merge(
+    goalie_names, left_on="facing_goalie", right_on="event_goalie_id", how="left"
+)
+goalie_season = goalie_season.merge(
+    goalie_names, left_on="facing_goalie", right_on="event_goalie_id", how="left"
+)
 
-        g_out = g[["goalie_id", "goalie_name", "goalie_rate", "goalie_rate_above_repl",
-                    "GOALIE_GAR_per60", "GOALIE_WAR_per60"]].copy()
+# --- Replacement level for goalies ---
+# Use starters (1000+ shots in a season) to set replacement level
+GOALIE_RL_PERCENTILE = 25
+starter_seasons = goalie_season[goalie_season["shots_faced"] >= 1000].copy()
+starter_seasons["GSAx_adj_per_shot"] = starter_seasons["GSAx_adj"] / starter_seasons["shots_faced"]
+goalie_rl_per_shot = float(np.percentile(starter_seasons["GSAx_adj_per_shot"], GOALIE_RL_PERCENTILE))
+print(f"  Goalie RL (per shot): {goalie_rl_per_shot:.5f} ({len(starter_seasons)} starter-seasons)", file=sys.stderr)
 
-        # Add per-metric coefficients for transparency
-        for col in g.columns:
-            if col.endswith("_G") and col not in g_out.columns:
-                g_out[col] = g[col]
+# --- Per-season goalie WAR ---
+goalie_season["GSAx_above_repl"] = goalie_season["GSAx_adj"] - goalie_rl_per_shot * goalie_season["shots_faced"]
+goalie_season["GOALIE_GAR"] = goalie_season["GSAx_above_repl"].round(2)
+goalie_season["GOALIE_WAR"] = (goalie_season["GOALIE_GAR"] / GOALS_TO_WINS).round(2)
 
-        g_out = g_out.sort_values("GOALIE_GAR_per60", ascending=False)
-        g_out.to_csv("output/v2_goalie_war.csv", index=False)
-        print(f"  Goalie WAR: {len(g_out):,} goalies → output/v2_goalie_war.csv", file=sys.stderr)
+goalie_season_out = goalie_season[[
+    "facing_goalie", "event_goalie_name", "season", "shots_faced", "goals_against",
+    "xGA", "sv_pct", "GSAx", "GSAx_adj", "GOALIE_GAR", "GOALIE_WAR"
+]].rename(columns={"facing_goalie": "goalie_id", "event_goalie_name": "goalie_name"})
+goalie_season_out = goalie_season_out.sort_values(["season", "GOALIE_WAR"], ascending=[True, False])
+goalie_season_out.to_csv("output/v2_goalie_war_by_season.csv", index=False)
+print(f"  Per-season goalie WAR: {len(goalie_season_out):,} goalie-seasons → output/v2_goalie_war_by_season.csv", file=sys.stderr)
 
-        print("\nTop 15 goalies (GAR per 60):", file=sys.stderr)
-        print(g_out.head(15)[["goalie_name", "goalie_rate", "GOALIE_GAR_per60",
-                              "GOALIE_WAR_per60"]].to_string(index=False), file=sys.stderr)
-else:
-    print("\n  No v2_goalie_rapm.csv found — skipping goalie WAR", file=sys.stderr)
-    print("  (Re-run rapm_v2.py to generate goalie coefficients)", file=sys.stderr)
+# --- Pooled goalie WAR ---
+goalie_pooled["GSAx_above_repl"] = goalie_pooled["total_GSAx_adj"] - goalie_rl_per_shot * goalie_pooled["total_shots"]
+goalie_pooled["GOALIE_GAR"] = goalie_pooled["GSAx_above_repl"].round(2)
+goalie_pooled["GOALIE_WAR"] = (goalie_pooled["GOALIE_GAR"] / GOALS_TO_WINS).round(2)
+
+goalie_pooled_out = goalie_pooled[[
+    "facing_goalie", "event_goalie_name", "total_shots", "total_ga", "total_xGA",
+    "total_sv_pct", "total_GSAx_adj", "seasons_played", "GOALIE_GAR", "GOALIE_WAR"
+]].rename(columns={"facing_goalie": "goalie_id", "event_goalie_name": "goalie_name"})
+goalie_pooled_out = goalie_pooled_out.sort_values("GOALIE_WAR", ascending=False)
+goalie_pooled_out.to_csv("output/v2_goalie_war.csv", index=False)
+print(f"  Pooled goalie WAR: {len(goalie_pooled_out):,} goalies → output/v2_goalie_war.csv", file=sys.stderr)
+
+# Print top goalies
+print("\nTop 15 goalie-seasons (2022+, 800+ shots):", file=sys.stderr)
+recent_g = goalie_season_out[(goalie_season_out["season"] >= 2022) & (goalie_season_out["shots_faced"] >= 800)]
+recent_g = recent_g.sort_values("GOALIE_WAR", ascending=False).head(15)
+print(recent_g[["season", "goalie_name", "shots_faced", "sv_pct", "GSAx_adj", "GOALIE_WAR"]].to_string(index=False), file=sys.stderr)
+
+print("\nTop 10 pooled goalie WAR (3000+ shots):", file=sys.stderr)
+top_pooled_g = goalie_pooled_out[goalie_pooled_out["total_shots"] >= 3000].head(10)
+print(top_pooled_g[["goalie_name", "total_shots", "total_sv_pct", "seasons_played", "GOALIE_WAR"]].to_string(index=False), file=sys.stderr)
 
 
 # ── 9. Summary statistics ───────────────────────────────────────────────────
