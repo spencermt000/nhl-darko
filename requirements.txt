@@ -1,0 +1,7 @@
+streamlit>=1.55.0
+pandas>=2.2.0
+numpy>=2.0.0
+plotly>=6.0.0
+scikit-learn>=1.8.0
+xgboost>=3.0.0
+beautifulsoup4>=4.12.0

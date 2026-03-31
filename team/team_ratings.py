@@ -58,6 +58,16 @@ def build_game_outcomes():
         "home_goalie_id", "away_goalie_id",
     ])
 
+    # Align PBP game_ids with skaters_by_game convention.
+    # MoneyPuck PBP uses NHL start-year (2022-23 → 2022xxxxxx)
+    # MoneyPuck SBG/daily uses end-year (2022-23 → 2023xxxxxx)
+    # Scraped data (2024+) already uses end-year convention.
+    # Fix: for games where game_id prefix == season - 1, shift to season prefix.
+    pbp["gid_prefix"] = pbp["game_id"] // 1_000_000
+    needs_fix = pbp["gid_prefix"] == pbp["season"] - 1
+    pbp.loc[needs_fix, "game_id"] = pbp.loc[needs_fix, "game_id"] + 1_000_000
+    pbp.drop(columns=["gid_prefix"], inplace=True)
+
     # Goal differential: exclude shootout (period 5)
     reg = pbp[pbp["period"] <= 4]
     goals = (

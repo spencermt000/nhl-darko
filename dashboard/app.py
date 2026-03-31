@@ -16,14 +16,92 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from unicodedata import normalize as _ucnorm
 from dash import Dash, html, dcc, Input, Output, dash_table
 
 # ── Load all data ─────────────────────────────────────────────────────────────
+
+# Contracts
+contracts = pd.read_csv("contracts/contracts.csv")
+# Parse cap hit: remove $, commas → float
+contracts["cap_hit_num"] = (contracts["Cap Hit"]
+                            .str.replace("$", "", regex=False)
+                            .str.replace(",", "", regex=False)
+                            .astype(float))
+# Keep most recent (highest cap hit) contract per player
+contracts = contracts.sort_values("cap_hit_num", ascending=False).drop_duplicates("Player", keep="first")
+# Name aliases for cases that can't be resolved automatically (nicknames, etc.)
+_contract_name_fixes = {
+    "Joshua Norris": "Josh Norris",
+    "John-Jason Peterka": "JJ Peterka",
+    "Matthew Beniers": "Matty Beniers",
+    "Janis Jérôme Moser": "J.J. Moser",
+    "Mike Matheson": "Michael Matheson",
+    "Cameron York": "Cam York",
+    "Artyom Zub": "Artem Zub",
+    "Nicklaus Perbix": "Nick Perbix",
+    "Joseph Veleno": "Joe Veleno",
+    "Alexander Petrovic": "Alex Petrovic",
+    "Pat Maroon": "Patrick Maroon",
+    "Yegor Zamula": "Egor Zamula",
+    "Nicolai Knyzhov": "Nikolai Knyzhov",
+    "Fyodor Svechkov": "Fedor Svechkov",
+    "Callan Foote": "Cal Foote",
+    "Zachary Jones": "Zac Jones",
+    "Joshua Dunne": "Josh Dunne",
+    "Samuel Poulin": "Sam Poulin",
+    "Matthew Stienburg": "Matt Stienburg",
+    "Ronald Attard": "Ronnie Attard",
+    "Danny O'Regan": "Daniel O'Regan",
+    "Nikolay Prokhorkin": "Nikolai Prokhorkin",
+    "Yegor Korshkov": "Egor Korshkov",
+    "Matthew Savoie": "Matt Savoie",
+    "Benjamin Kindel": "Ben Kindel",
+    "Maxim Shabanov": "Max Shabanov",
+    "Cameron Lund": "Cam Lund",
+}
+
+def _strip_accents(s):
+    return _ucnorm("NFD", s).encode("ascii", "ignore").decode("ascii")
+
+# Build lookup dict keyed by stats player name.
+# Auto-resolve accents, casing, and hyphens; use manual fixes for nicknames.
+contract_lookup = {}
+# Pre-load stats names for fuzzy matching
+daily_war = pd.read_csv("output/v5_daily_war.csv")
+_stats_names = set(daily_war["player_name"].unique())
+_stats_lower = {n.lower(): n for n in _stats_names}
+
+for _, row in contracts.iterrows():
+    name = row["Player"]
+    # 1) Manual fix
+    if name in _contract_name_fixes:
+        contract_lookup[_contract_name_fixes[name]] = row
+        continue
+    # 2) Exact match
+    if name in _stats_names:
+        contract_lookup[name] = row
+        continue
+    # 3) Strip accents
+    stripped = _strip_accents(name)
+    if stripped in _stats_names:
+        contract_lookup[stripped] = row
+        continue
+    # 4) Case-insensitive (handles DeBrincat vs Debrincat, MacKenzie vs Mackenzie)
+    if stripped.lower() in _stats_lower:
+        contract_lookup[_stats_lower[stripped.lower()]] = row
+        continue
+    # 5) Hyphen → space (Charles-Alexis → Charles Alexis)
+    no_hyph = _strip_accents(name.replace("-", " "))
+    if no_hyph in _stats_names:
+        contract_lookup[no_hyph] = row
+        continue
+    # No match — likely a prospect who hasn't played NHL games
+    contract_lookup[name] = row
+
 daily = pd.read_csv("output/v5_daily_ratings.csv")
 daily["game_date"] = pd.to_datetime(daily["game_date"])
 daily["total_gar"] = daily["EV_O_gar"] + daily["EV_D_gar"] + daily["PP_gar"] + daily["PK_gar"] + daily["PEN_gar"]
-
-daily_war = pd.read_csv("output/v5_daily_war.csv")
 
 # BPM components (GV, OOI, RAPM per season — through 2024)
 bpm = pd.read_csv("output/v4_bpm_player_seasons.csv")
@@ -500,8 +578,14 @@ def update_leaderboard(season, pos, min_gp, sort_col, view, top_n):
 
     _style_fig(fig)
 
+    # Add contract cap hit to table
+    df["Cap Hit"] = df["player_name"].map(
+        lambda n: contract_lookup[n]["Cap Hit"] if n in contract_lookup else None)
+    df["Cap %"] = df["player_name"].map(
+        lambda n: contract_lookup[n]["Cap %"] if n in contract_lookup else None)
+
     # Table
-    table_cols = ["rank", "player_name", "position", "GP"]
+    table_cols = ["rank", "player_name", "position", "GP", "Cap Hit", "Cap %"]
     # Add all available metric columns
     optional = ["EV_O_GAR", "EV_D_GAR", "PP_GAR", "PK_GAR", "PEN_GAR",
                 "WAR_O", "WAR_D", "WAR", "WAR_82",
@@ -586,6 +670,28 @@ def update_player(player_name, season):
                                     ("BPR_D", "BPR_D", COLORS["RAPM"]),
                                     ("BPR", "BPR", COLORS["RAPM"])]:
                 card_items.append(_stat_box(lbl, r.get(col, np.nan), clr, small=True))
+
+        # Contract info
+        cinfo = contract_lookup.get(player_name)
+        if cinfo is not None:
+            card_items.append(html.Div(style={"borderLeft": "2px solid #ddd",
+                                               "height": "50px", "margin": "0 5px"}))
+            card_items.append(html.Div(style={"textAlign": "center", "minWidth": "120px"}, children=[
+                html.Div(cinfo["Cap Hit"], style={"fontSize": "18px", "fontWeight": "bold", "color": "#2d6a4f"}),
+                html.Div("Cap Hit", style={"fontSize": "10px", "color": "#888", "marginTop": "2px"}),
+            ]))
+            card_items.append(html.Div(style={"textAlign": "center", "minWidth": "60px"}, children=[
+                html.Div(cinfo["Term"], style={"fontSize": "16px", "fontWeight": "bold", "color": "#2d6a4f"}),
+                html.Div("Term", style={"fontSize": "10px", "color": "#888", "marginTop": "2px"}),
+            ]))
+            card_items.append(html.Div(style={"textAlign": "center", "minWidth": "50px"}, children=[
+                html.Div(str(cinfo["Cap %"]), style={"fontSize": "16px", "fontWeight": "bold", "color": "#2d6a4f"}),
+                html.Div("Cap %", style={"fontSize": "10px", "color": "#888", "marginTop": "2px"}),
+            ]))
+            card_items.append(html.Div(style={"textAlign": "center", "minWidth": "40px"}, children=[
+                html.Div(str(cinfo["Level"]), style={"fontSize": "16px", "fontWeight": "bold", "color": "#2d6a4f"}),
+                html.Div("Type", style={"fontSize": "10px", "color": "#888", "marginTop": "2px"}),
+            ]))
 
         card = html.Div(style={"display": "flex", "gap": "20px", "flexWrap": "wrap",
                                 "padding": "15px", "backgroundColor": "white",
@@ -755,7 +861,9 @@ def update_compare(players, season, metric):
         if len(pw) == 0:
             continue
         r = pw.iloc[0]
+        cinfo = contract_lookup.get(name)
         row = {"Player": name, "Pos": r["position"], "GP": int(r["GP"]),
+               "Cap Hit": cinfo["Cap Hit"] if cinfo is not None else None,
                "WAR": r.get("WAR", np.nan), "WAR/82": r.get("WAR_82", np.nan)}
         for c in ["EV_O_GAR", "EV_D_GAR", "PP_GAR", "PK_GAR", "PEN_GAR",
                    "composite_O", "composite_D", "GV_O", "OOI_O", "RAPM_O",

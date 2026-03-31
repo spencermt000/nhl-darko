@@ -2,7 +2,36 @@
 .claude/
 .Rproj.user/
 __pycache__/
-data/
 claude.md
-*.html
-*.csv
+*.pkl
+*.pyc
+.gitattributes
+
+# Large raw data files
+data/raw_pbp.csv
+data/raw_pbp_*.csv
+data/raw_data.csv
+data/raw_data_*.csv
+data/shots_*.csv
+data/skaters_by_game.csv
+data/skaters_by_game2025.csv
+data/moneypuck_player_bio.csv
+
+# Keep deploy-trimmed versions
+!data/skaters_by_game_deploy.csv
+!data/skaters_by_game2025_deploy.csv
+!data/nhl_draft_picks.csv
+!data/trades.csv
+
+# Large pipeline intermediate files
+output/v2_clean_pbp.csv
+output/rapm_dataset*.csv
+output/clean_pbp.csv
+output/v3_daily_bpr.csv
+output/v4_daily_epm.csv
+output/v4_epm_raw_per_game.csv
+output/v5_daily_ratings.csv
+output/v4_daily_epm.csv
+
+# Keep deploy-trimmed daily ratings
+!output/v5_daily_ratings_deploy.csv

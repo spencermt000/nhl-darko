@@ -20,6 +20,7 @@ Outputs:
   output/v3_rolling_rapm_latest.csv    Each player's most recent window estimate
 """
 
+import os
 import sys
 import json
 import numpy as np
@@ -178,11 +179,22 @@ df = pd.read_csv("output/v2_clean_pbp.csv")
 df = df[df["strength_state"] == STRENGTH_FILTER].copy()
 print(f"  {len(df):,} 5v5 events", file=sys.stderr)
 
-# Player name/position lookup
+# Player name/position lookup — combine pooled RAPM with skaters_by_game for full coverage
 player_info = pd.read_csv("output/v2_final_ratings.csv", usecols=["player_id", "player_name", "position"])
 player_info["player_id"] = player_info["player_id"].astype(int)
 name_lookup = player_info.set_index("player_id")["player_name"].to_dict()
 pos_lookup = player_info.set_index("player_id")["position"].to_dict()
+
+# Supplement with skaters_by_game to pick up any players missing from pooled RAPM
+for _sbg_file in ["data/skaters_by_game.csv", "data/skaters_by_game2025.csv"]:
+    if os.path.exists(_sbg_file):
+        _sbg = pd.read_csv(_sbg_file, usecols=["playerId", "name", "position"], low_memory=False)
+        _sbg = _sbg.dropna(subset=["playerId", "name"]).drop_duplicates("playerId")
+        for _, _row in _sbg.iterrows():
+            pid = int(_row["playerId"])
+            if pid not in name_lookup:
+                name_lookup[pid] = _row["name"]
+                pos_lookup[pid] = "F" if _row["position"] in ["C", "L", "R"] else _row["position"]
 
 seasons = sorted(df["season"].unique())
 print(f"  Seasons: {seasons}", file=sys.stderr)

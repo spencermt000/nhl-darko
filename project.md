@@ -17,6 +17,7 @@ The output is a carry-forward composite — **cf_total** — that captures a pla
 | MoneyPuck skaters-by-game | Per-player per-game situational stats | `data/skaters_by_game.csv` |
 | MoneyPuck player bio | Birth dates, position, metadata | `data/moneypuck_player_bio.csv` |
 | RAPM lineup dataset | On-ice lineup data at CHANGE events | `data/rapm_dataset.csv` |
+| Contract data | Cap hit, term, signing details, agent, draft info | `contracts/contracts.csv` |
 
 All data is publicly available at [moneypuck.com/data.htm](https://moneypuck.com/data.htm).
 
@@ -88,6 +89,20 @@ All data is publicly available at [moneypuck.com/data.htm](https://moneypuck.com
                                  └─────────────────────────────────────────┘
   (roster aggregation) ─► team_ratings.py ──► output/v6_team_game_ratings.csv
                                               output/v6_team_season_ratings.csv
+
+                                 ┌─────────────────────────────────────────┐
+                                 │         WIN SHARES                      │
+                                 └─────────────────────────────────────────┘
+  v5_daily_war.csv ─────► win_shares.py ────► output/win_shares_by_season.csv
+  v6_team_season_ratings ►
+  skaters_by_game.csv ──►
+
+                                 ┌─────────────────────────────────────────┐
+                                 │       CONTRACT ANALYSIS                 │
+                                 └─────────────────────────────────────────┘
+  contracts/contracts.csv ► predict_contracts.py ► contracts/contract_predictions.csv
+  v5_daily_war.csv ───────► surplus_model.py ────► contracts/surplus_values.csv
+  dashboard_skater_war ───►                        contracts/career_surplus.csv
 
                                  ┌─────────────────────────────────────────┐
                                  │       VISUALIZATION / DASHBOARD         │
@@ -407,6 +422,21 @@ Predictive validity was measured via year-over-year r² (how well season N predi
 | `output/v6_team_game_ratings.csv` | Team-level per-game ratings |
 | `output/v6_team_season_ratings.csv` | Team-level season ratings |
 
+### Win Shares Outputs
+
+| File | Description |
+|------|-------------|
+| `output/win_shares_by_season.csv` | Per-player-season Win Shares (OWS, DWS, WS, WS/82) |
+
+### Contract Outputs
+
+| File | Description |
+|------|-------------|
+| `contracts/contracts.csv` | Raw contract data (cap hit, term, signing status, agent, etc.) |
+| `contracts/contract_predictions.csv` | XGBoost-predicted Cap % and Term vs actuals |
+| `contracts/surplus_values.csv` | Per-player-season surplus value (market value - cap hit) |
+| `contracts/career_surplus.csv` | Career surplus totals per player |
+
 ### Analysis Outputs
 
 | File | Description |
@@ -419,7 +449,7 @@ Predictive validity was measured via year-over-year r² (how well season N predi
 
 | File | Description |
 |------|-------------|
-| `dashboard/app.py` | Interactive Dash explorer (http://127.0.0.1:8050) |
+| `dashboard/app.py` | Interactive Dash explorer with contract data (http://127.0.0.1:8050) |
 | `viz_output/top10_YYYY.png` | Top 10 skaters per season by BPR |
 | `viz_output/career_trajectories.png` | BPR over time for elite players |
 | `viz_output/bpr_scatter.html` | Interactive BPR_O vs BPR_D scatter |
@@ -470,6 +500,75 @@ Predictive validity was measured via year-over-year r² (how well season N predi
 | Kucherov | 6.14 | 4.93 | +1.21 |
 | Robertson | 4.95 | 4.78 | +0.17 |
 | Caufield | 4.62 | 4.51 | +0.11 |
+
+---
+
+## Step 8: Win Shares (`bpr/win_shares.py`)
+
+Win Shares allocates **actual team wins** to individual players. Unlike WAR (which measures value above replacement and can be negative), Win Shares is always non-negative and sums to exactly the team's win total.
+
+### Algorithm
+
+For each team-season:
+1. Load each player's `GAR_O` and `GAR_D` from the daily pipeline (`v5_daily_war.csv`)
+2. Floor individual GAR_O and GAR_D at 0 (negative contributors get 0 WS, not negative)
+3. Sum all floored GAR across the team roster
+4. Allocate team wins proportionally: `OWS = (floored_GAR_O / team_total) × team_wins`
+5. `WS = OWS + DWS`, `WS_82 = WS × 82 / GP`
+
+Player-team assignment uses the primary team pattern from `validate_war.py` — each player is assigned to the team where they logged the most icetime per season.
+
+### Properties
+
+- **Non-negative:** WS ≥ 0 for all players (bad players get 0, not negative)
+- **Team-summable:** Sum of all player WS on a team equals the team's actual wins (verified: max error < 0.003)
+- **Context-dependent:** Players on better teams earn more WS for equivalent performance
+- **Correlation with WAR:** r = 0.77 (correlated but distinct — WS is bounded at 0 and tied to team quality)
+
+### Interpretation
+
+WS measures how many team wins a player was responsible for. A player with 15 WS on a 50-win team contributed roughly 30% of the team's wins. WS/82 normalizes to an 82-game pace for comparing across partial seasons.
+
+---
+
+## Contract Analysis (`contracts/`)
+
+### Contract Prediction (`contracts/predict_contracts.py`)
+
+XGBoost models predicting **Cap %** and **Term** for standard (non-ELC) skater contracts.
+
+**Features:** Per-game production rates (points, shots, hits, blocks), WAR/GAR components, BPR ratings, daily model rates, sign age, UFA/RFA status, position, 2-year WAR trend.
+
+**Name matching:** Contracts use various name formats vs the stats pipeline. A 5-step cascade resolves mismatches: manual aliases (nicknames like "JJ Peterka" ↔ "John-Jason Peterka"), exact match, accent stripping (Slafkovský → Slafkovsky), case-insensitive (DeBrincat ↔ Debrincat), hyphen removal. This resolves 90% of contract-to-stats joins.
+
+**Results (temporal split, train < July 2024, test ≥ July 2024):**
+
+| Target | CV MAE | Test MAE | Test R² |
+|--------|--------|----------|---------|
+| Cap % | 0.99% | 0.99% | 0.773 |
+| Term | 1.05 yr | 1.09 yr | 0.510 |
+
+Top features: points/game, 2-year WAR average, shots/game, blocks/game, PP usage.
+
+### Surplus Value Model (`contracts/surplus_model.py`)
+
+For each player-season, calculates how much value a player provided vs what they cost.
+
+**Market rate calibration:** The $/WAR rate is derived each season from the UFA free-agent market (total UFA cap spend above minimum salary / total UFA WAR). This yields ~$16-20M per WAR across seasons (~19-21% of cap per WAR).
+
+```
+Market Value = WAR (floored at 0) × $/WAR + minimum salary
+Surplus = Market Value - Cap Hit
+```
+
+**Key findings:**
+- **ELCs** average +$908K surplus per season (cheap contracts for young talent)
+- **RFAs** average +$744K surplus (restricted market suppresses price)
+- **UFAs** average ~$0 surplus (free market prices correctly on average)
+- **Biggest career surplus:** McDavid (+$193M over 8 seasons at $12.5M AAV)
+- **Biggest overpays:** Erik Karlsson, Drew Doughty (~$10M/yr negative surplus)
+
+Outputs: `surplus_values.csv` (4,536 player-seasons), `career_surplus.csv` (1,245 career totals).
 
 ---
 

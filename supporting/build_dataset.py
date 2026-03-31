@@ -35,9 +35,35 @@ pbp_cols = [
 ]
 
 print("Loading raw_pbp.csv...", file=sys.stderr)
+import os
+
 _dtype = {"game_id": "int64", "event_id": "int64",
           "event_player_1_id": "Int64", "event_player_2_id": "Int64"}
 pbp = pd.read_csv("data/raw_pbp.csv", usecols=pbp_cols, dtype=_dtype)
+
+# Append 2024-25 season if available (scraped separately)
+if os.path.exists("data/raw_pbp_2024.csv"):
+    print("  Loading raw_pbp_2024.csv...", file=sys.stderr)
+    try:
+        pbp_2024 = pd.read_csv("data/raw_pbp_2024.csv", usecols=[c for c in pbp_cols if c not in ["x_fixed", "y_fixed", "strength"]], dtype=_dtype)
+    except ValueError:
+        pbp_2024 = pd.read_csv("data/raw_pbp_2024.csv", dtype={"game_id": "int64", "event_id": "int64"})
+        pbp_2024 = pbp_2024[[c for c in pbp_cols if c in pbp_2024.columns]]
+    pbp_2024.loc[pbp_2024["season"] == 2025, "season"] = 2024
+    # Fill goalies from raw_data_2024 if needed
+    if pbp_2024["home_goalie"].isna().all() and os.path.exists("data/raw_data_2024.csv"):
+        print("  Filling 2024 goalie names from raw_data_2024.csv...", file=sys.stderr)
+        rd_g24 = pd.read_csv("data/raw_data_2024.csv",
+                             usecols=["game_id", "event_id", "home_goalie", "away_goalie"],
+                             dtype={"game_id": "int64", "event_id": "int64"})
+        rd_g24 = rd_g24.dropna(subset=["home_goalie"]).drop_duplicates(subset=["game_id", "event_id"], keep="first")
+        pbp_2024 = pbp_2024.drop(columns=["home_goalie", "away_goalie"], errors="ignore")
+        pbp_2024 = pbp_2024.merge(rd_g24[["game_id", "event_id", "home_goalie", "away_goalie"]],
+                                  on=["game_id", "event_id"], how="left")
+    # Remove any 2024 rows already in pbp to avoid duplicates
+    pbp = pbp[pbp["season"] != 2024]
+    pbp = pd.concat([pbp, pbp_2024], ignore_index=True)
+    print(f"  Appended {len(pbp_2024):,} rows from 2024-25", file=sys.stderr)
 
 # Append 2025-26 season if available
 import os
@@ -87,6 +113,11 @@ raw_goalie = pd.read_csv(
     "data/raw_pbp.csv",
     usecols=["event_goalie_name", "event_goalie_id"],
 )
+# Append 2024 goalie data
+if os.path.exists("data/raw_pbp_2024.csv"):
+    raw_goalie_2024 = pd.read_csv("data/raw_pbp_2024.csv",
+                                  usecols=["event_goalie_name", "event_goalie_id"])
+    raw_goalie = pd.concat([raw_goalie, raw_goalie_2024], ignore_index=True)
 # Append 2025 goalie data
 if os.path.exists("data/raw_pbp_2025.csv"):
     raw_goalie_2025 = pd.read_csv(
