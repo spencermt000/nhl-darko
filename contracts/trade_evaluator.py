@@ -196,8 +196,9 @@ def value_player(player_name, trade_season):
 
     yrs = len(remaining_seasons)
     cap_hit = player_contract.iloc[0]["cap_hit"]
+    per_yr = total_npv / max(yrs, 1)
 
-    return total_npv, f"{resolved}: mkt=${curr_market_value:,.0f}, age={age}, {yrs}yr @ ${cap_hit:,.0f}"
+    return per_yr, f"{resolved}: mkt=${curr_market_value:,.0f}, age={age}, {yrs}yr @ ${cap_hit:,.0f}, ${per_yr:,.0f}/yr"
 
 
 def value_player_production(player_name, trade_season):
@@ -248,7 +249,8 @@ def value_player_production(player_name, trade_season):
         discount = (1 + CAP_GROWTH_RATE) ** i
         prod_npv += proj_market / discount
 
-    return prod_npv, f"{resolved}: mkt=${curr_market_value:,.0f}, age={age}, {remaining}yr ctrl"
+    per_yr = prod_npv / max(remaining, 1)
+    return per_yr, f"{resolved}: mkt=${curr_market_value:,.0f}, age={age}, {remaining}yr ctrl, ${per_yr:,.0f}/yr"
 
 
 # ── 4. Evaluate a trade ────────────────────────────────────────────────────
