@@ -728,7 +728,7 @@ with _tabs[4]:
             mc3.metric("Sv%", f"{latest['sv_pct']:.3f}")
             mc4.metric("Shots", f"{int(latest['shots_faced']):,}")
             cinfo = cl.get(g_select)
-            mc5.metric("Cap Hit", f"${cinfo['cap_hit']:,.0f}" if cinfo else "—")
+            mc5.metric("Cap Hit", f"${cinfo['cap_hit']:,.0f}" if cinfo is not None else "—")
 
             if len(g_hist) > 1:
                 # WAR by season
