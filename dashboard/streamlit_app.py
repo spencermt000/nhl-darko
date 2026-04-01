@@ -111,6 +111,10 @@ def load_data():
     fa_path = os.path.join(CONTRACTS, "fa_projections_2026.csv")
     fa_proj = pd.read_csv(fa_path) if os.path.exists(fa_path) else None
 
+    # Goalie WAR
+    goalie_path = os.path.join(OUTPUT, "dashboard_goalie_war.csv")
+    goalie_war = pd.read_csv(goalie_path) if os.path.exists(goalie_path) else None
+
     # Player projections
     proj_path = os.path.join(CONTRACTS, "player_projections_2026.csv")
     player_proj = pd.read_csv(proj_path) if os.path.exists(proj_path) else None
@@ -180,7 +184,8 @@ def load_data():
         "daily": daily, "unified": unified, "skater_box": skater_box,
         "win_shares": win_shares, "surplus": surplus,
         "career_surplus": career_surplus, "fa_proj": fa_proj,
-        "player_proj": player_proj, "active_contracts": active_contracts,
+        "player_proj": player_proj, "goalie_war": goalie_war,
+        "active_contracts": active_contracts,
         "draft_pick_value": draft_pick_value, "draft_pick_detail": draft_pick_detail,
         "draft_picks_raw": draft_picks_raw,
     }
@@ -237,13 +242,13 @@ st.markdown("## NHL Player Ratings")
 
 _tabs = st.tabs([
     "Leaderboard", "Player Profile", "Compare",
-    "Win Shares", "Team View", "Contracts & Value",
+    "Win Shares", "Goalies", "Team View", "Contracts & Value",
     "Free Agent Projections", "Player Projections", "Draft Pick Value",
     "Trade Evaluator", "Research",
 ])
 _tab_names = [
     "Leaderboard", "Player Profile", "Compare",
-    "Win Shares", "Team View", "Contracts & Value",
+    "Win Shares", "Goalies", "Team View", "Contracts & Value",
     "Free Agent Projections", "Player Projections", "Draft Pick Value",
     "Trade Evaluator", "Research",
 ]
@@ -650,10 +655,117 @@ with _tabs[3]:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TEAM VIEW
+# GOALIES
 # ═══════════════════════════════════════════════════════════════════════════════
 
 with _tabs[4]:
+    st.header("Goalies")
+
+    gw = data["goalie_war"]
+    if gw is not None:
+        gw_seasons = sorted(gw["season"].unique())
+
+        c1, c2, c3 = st.columns([1.5, 1, 1])
+        g_season = c1.selectbox("Season", gw_seasons, index=len(gw_seasons)-1,
+                                format_func=season_label, key="g_season")
+        g_min_shots = c2.number_input("Min Shots", 100, 3000, 500, key="g_min_shots")
+        g_sort = c3.selectbox("Sort By", ["GOALIE_WAR", "GSAx_adj", "sv_pct", "shots_faced"],
+                              key="g_sort")
+
+        gw_szn = gw[gw["season"] == g_season].copy()
+        gw_szn = gw_szn[gw_szn["shots_faced"] >= g_min_shots]
+        gw_szn = gw_szn.sort_values(g_sort, ascending=False).reset_index(drop=True)
+        gw_szn["rank"] = gw_szn.index + 1
+
+        # Contract info
+        cl = get_contract_lookup(g_season)
+        gw_szn["Cap Hit"] = gw_szn["goalie_name"].map(
+            lambda n: f"${cl[n]['cap_hit']:,.0f}" if n in cl else None)
+
+        # Leaderboard table
+        st.subheader("Goalie Leaderboard")
+        show_cols = ["rank", "goalie_name", "Cap Hit", "shots_faced",
+                     "sv_pct", "GSAx_adj", "GOALIE_GAR", "GOALIE_WAR"]
+        show_cols = [c for c in show_cols if c in gw_szn.columns]
+        st.dataframe(gw_szn[show_cols].round(3), use_container_width=True, hide_index=True)
+
+        # GSAx chart
+        st.subheader("Goals Saved Above Expected")
+        top_g = gw_szn.head(20)
+        fig_g = go.Figure()
+        colors_g = [COLORS["EV_O"] if v > 0 else COLORS["EV_D"] for v in top_g["GSAx_adj"]]
+        fig_g.add_trace(go.Bar(
+            y=top_g["goalie_name"], x=top_g["GSAx_adj"], orientation="h",
+            marker_color=colors_g, opacity=0.85,
+            hovertemplate="%{y}<br>GSAx: %{x:.1f}<br>WAR: %{customdata:.2f}<extra></extra>",
+            customdata=top_g["GOALIE_WAR"],
+        ))
+        fig_g.update_layout(
+            yaxis=dict(autorange="reversed", tickfont=dict(size=11)),
+            xaxis_title="Goals Saved Above Expected (adjusted)",
+            title=f"GSAx — {season_label(g_season)}",
+            height=max(400, len(top_g) * 24), showlegend=False,
+        )
+        fig_g.add_vline(x=0, line_color="#999", line_width=1)
+        style_fig(fig_g)
+        st.plotly_chart(fig_g, use_container_width=True)
+
+        # Goalie profile
+        st.divider()
+        st.subheader("Goalie Profile")
+        all_goalies = sorted(gw["goalie_name"].unique())
+        g_select = st.selectbox("Select Goalie", all_goalies,
+                                index=all_goalies.index("Connor Hellebuyck") if "Connor Hellebuyck" in all_goalies else 0,
+                                key="g_profile")
+
+        g_hist = gw[gw["goalie_name"] == g_select].sort_values("season")
+        if len(g_hist):
+            # Summary
+            latest = g_hist.iloc[-1]
+            mc1, mc2, mc3, mc4, mc5 = st.columns(5)
+            mc1.metric("WAR", f"{latest['GOALIE_WAR']:.2f}")
+            mc2.metric("GSAx", f"{latest['GSAx_adj']:.1f}")
+            mc3.metric("Sv%", f"{latest['sv_pct']:.3f}")
+            mc4.metric("Shots", f"{int(latest['shots_faced']):,}")
+            cinfo = cl.get(g_select)
+            mc5.metric("Cap Hit", f"${cinfo['cap_hit']:,.0f}" if cinfo else "—")
+
+            if len(g_hist) > 1:
+                # WAR by season
+                fig_gh = go.Figure()
+                fig_gh.add_trace(go.Bar(
+                    x=[season_label(s) for s in g_hist["season"]],
+                    y=g_hist["GOALIE_WAR"],
+                    marker_color=COLORS["EV_O"], opacity=0.85,
+                    hovertemplate="%{x}<br>WAR: %{y:.2f}<br>GSAx: %{customdata:.1f}<extra></extra>",
+                    customdata=g_hist["GSAx_adj"],
+                ))
+                fig_gh.update_layout(title=f"{g_select} — WAR by Season", height=350,
+                                     yaxis_title="Goalie WAR")
+                style_fig(fig_gh)
+                st.plotly_chart(fig_gh, use_container_width=True)
+
+                # Sv% trend
+                fig_sv = go.Figure()
+                fig_sv.add_trace(go.Scatter(
+                    x=[season_label(s) for s in g_hist["season"]],
+                    y=g_hist["sv_pct"], mode="lines+markers",
+                    line=dict(color=COLORS["EV_O"], width=3),
+                    marker=dict(size=7),
+                ))
+                fig_sv.update_layout(title=f"{g_select} — Save Percentage", height=300,
+                                     yaxis_title="Sv%", yaxis_tickformat=".3f")
+                style_fig(fig_sv)
+                st.plotly_chart(fig_sv, use_container_width=True)
+    else:
+        st.warning("Goalie WAR data not found.")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TEAM VIEW
+# ═══════════════════════════════════════════════════════════════════════════════
+
+with _tabs[5]:
     st.header("Team View — 2025-26")
 
     ws_data = data["win_shares"]
@@ -788,7 +900,7 @@ with _tabs[4]:
 # CONTRACTS & VALUE
 # ═══════════════════════════════════════════════════════════════════════════════
 
-with _tabs[5]:
+with _tabs[6]:
     st.header("Contracts & Surplus Value")
 
     tab1, tab2 = st.tabs(["Surplus Value", "Cap Hit vs Performance"])
@@ -895,7 +1007,7 @@ with _tabs[5]:
 # FREE AGENT PROJECTIONS
 # ═══════════════════════════════════════════════════════════════════════════════
 
-with _tabs[6]:
+with _tabs[7]:
     st.header("2026 Free Agent Contract Projections")
 
     st.caption("XGBoost model predictions based on current-season stats, age, and market position")
@@ -936,7 +1048,7 @@ with _tabs[6]:
 # PLAYER PROJECTIONS
 # ═══════════════════════════════════════════════════════════════════════════════
 
-with _tabs[7]:
+with _tabs[8]:
     st.header("Player Projections — 2026-27")
     st.caption("Ridge regression projections based on carry-forward ratings, age curves, and current production")
 
@@ -1026,7 +1138,7 @@ with _tabs[7]:
 # DRAFT PICK VALUE
 # ═══════════════════════════════════════════════════════════════════════════════
 
-with _tabs[8]:
+with _tabs[9]:
     st.header("Draft Pick Value Chart")
     st.caption("Expected WAR and surplus value by draft position, based on historical outcomes (2005-2024 drafts)")
 
@@ -1150,7 +1262,7 @@ with _tabs[8]:
 # TRADE EVALUATOR
 # ═══════════════════════════════════════════════════════════════════════════════
 
-with _tabs[9]:
+with _tabs[10]:
     st.header("Trade Evaluator")
     st.caption("Value players and picks in dollars, then compare trade sides")
 
@@ -1247,7 +1359,7 @@ with _tabs[9]:
 # RESEARCH
 # ═══════════════════════════════════════════════════════════════════════════════
 
-with _tabs[10]:
+with _tabs[11]:
     st.header("Research")
 
     CONTENT_DIR = os.path.join(BASE, "content")

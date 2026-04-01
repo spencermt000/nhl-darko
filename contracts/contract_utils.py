@@ -157,6 +157,19 @@ def load_stats_names():
             if row["player_name"] not in name_to_id:
                 name_to_id[row["player_name"]] = int(row["player_id"])
 
+    # Supplement with goalie WAR data
+    for goalie_file in ["output/dashboard_goalie_war.csv", "output/v2_goalie_war_by_season.csv"]:
+        gpath = os.path.join(BASE, goalie_file)
+        if os.path.exists(gpath):
+            _gw = pd.read_csv(gpath)
+            id_col = "goalie_id" if "goalie_id" in _gw.columns else "player_id"
+            name_col = "goalie_name" if "goalie_name" in _gw.columns else "player_name"
+            if id_col in _gw.columns and name_col in _gw.columns:
+                _gw = _gw.dropna(subset=[id_col, name_col]).drop_duplicates(name_col)
+                for _, _row in _gw.iterrows():
+                    if _row[name_col] not in name_to_id:
+                        name_to_id[_row[name_col]] = int(_row[id_col])
+
     # Supplement with skaters_by_game (catches callups not in daily)
     for sbg_file in ["data/skaters_by_game.csv", "data/skaters_by_game2025.csv"]:
         sbg_path = os.path.join(BASE, sbg_file)

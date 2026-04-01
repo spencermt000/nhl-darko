@@ -1,6 +1,6 @@
 ---
 title: Two Ways to Value a Trade — Surplus vs Production
-date: 2026-03-31
+date: 2026-04-01
 ---
 
 # Two Ways to Value a Trade — Surplus vs Production
@@ -10,61 +10,55 @@ When evaluating a trade, there are two fundamentally different questions you can
 1. **"How much cap-efficient value am I getting?"** (Surplus approach)
 2. **"How much raw production am I getting?"** (Production approach)
 
-We built both. Here's what they reveal.
+We built both. All values are expressed as **NPV per year** — the annualized present value of a player's contribution over their remaining control period.
 
 ## The Surplus Approach
 
-**Value = Predicted Market Value - Cap Cost**, summed over remaining control years.
+**Value/yr = (Predicted Market Value - Cap Cost) / Years of Control**, discounted at 4% annually.
 
-This answers: "Is this player a bargain or an overpay?" A player producing $10M worth of stats on a $9M contract has $1M of surplus per year. A player producing $8M on a $12M deal has -$4M surplus.
+This answers: "Is this player a bargain or an overpay on a per-year basis?"
 
-**Top surplus trade values (2025-26):**
+**Top surplus values per year (2025-26):**
 
-| Player | Surplus Value | Details |
-|--------|-------------|---------|
-| Connor Bedard | $8.1M | $950K ELC, 4yr control |
-| Quinn Hughes | $7.7M | $7.85M AAV, young with extension |
-| Matthew Tkachuk | $7.0M | $9.5M AAV, 4yr control |
-| Jason Robertson | $5.5M | $7.75M AAV, 4yr control |
-| Jack Hughes | $4.6M | $8M AAV, RFA control |
-
-**Who has negative surplus:** Players whose cap hit exceeds their production value. Matthews (-$4.4M at $13.25M), Draisaitl (-$2.7M at $14M), MacKinnon (-$1.4M at $12.6M). These are great players — they're just paid at or above their production level.
+| Player | Surplus/yr | Market Value | Cap Hit | Control |
+|--------|-----------|-------------|---------|---------|
+| Connor Bedard | $2.0M/yr | $4.8M mkt | $950K | 4yr |
+| Quinn Hughes | $1.9M/yr | $8.9M mkt | $7.85M | 4yr |
+| Matthew Tkachuk | $1.7M/yr | $9.4M mkt | $9.5M | 4yr |
+| Jason Robertson | $1.4M/yr | $7.6M mkt | $7.75M | 4yr |
+| Connor McDavid | $769K/yr | $13.3M mkt | $12.5M | 1yr |
 
 ## The Production Approach
 
-**Value = Predicted Market Value**, summed over control years. No cap cost subtracted.
+**Value/yr = Predicted Market Value / Years of Control**, discounted at 4% annually.
 
-This answers: "How much on-ice production am I getting?" It treats players like picks — pure expected output regardless of cost.
+This answers: "How much on-ice production am I getting per year?" It treats players like picks — pure expected output regardless of cost.
 
-**Top production trade values (2025-26):**
+**Top production values per year (2025-26):**
 
-| Player | Production Value | Surplus Value | Cap Cost (the difference) |
-|--------|-----------------|---------------|--------------------------|
-| Matthew Tkachuk | $33.0M | $7.0M | $26.0M |
-| Quinn Hughes | $31.2M | $7.7M | $23.5M |
-| Jason Robertson | $26.6M | $5.5M | $21.0M |
-| Brady Tkachuk | $24.8M | $4.2M | $20.6M |
-| Jack Hughes | $24.9M | $4.6M | $20.4M |
-| Connor Bedard | $17.8M | $8.1M | $9.8M |
-| Connor McDavid | $13.3M | $0.8M | $12.5M |
+| Player | Production/yr | Control |
+|--------|--------------|---------|
+| Connor McDavid | $13.3M/yr | 1yr |
+| Nathan MacKinnon | $11.2M/yr | 1yr |
+| Nikita Kucherov | $10.4M/yr | 1yr |
+| Auston Matthews | $8.9M/yr | 1yr |
+| Matthew Tkachuk | $8.3M/yr | 4yr |
 
 ## When to Use Which
 
-**Use surplus for:** Cap-constrained teams evaluating whether a trade improves their roster within the cap. A team at the ceiling cares about the surplus — can they fit this player's production within their budget?
+**Use surplus for:** Cap-constrained teams evaluating whether a trade improves their roster within the cap.
 
-**Use production for:** Rebuilding teams, comparing players to picks, or evaluating trades where the acquiring team has ample cap space. If you're trading picks for a player, you want to know the raw production you're getting, not the surplus.
+**Use production for:** Rebuilding teams, comparing players to picks, or evaluating trades where the acquiring team has ample cap space.
 
 ## The Key Insight: Contract = Tax
 
-The difference between production and surplus value is exactly the player's remaining cap cost. When you trade for a player, you're acquiring their production but also inheriting their contract.
+The difference between production and surplus value per year is the player's annualized cap cost. When you trade for a player, you're acquiring their production but also inheriting their contract.
 
-This is why Bedard ($8.1M surplus) looks more valuable than McDavid ($0.8M surplus) in the surplus framework — Bedard's $950K cap hit is nearly free, while McDavid's $12.5M eats most of his production value.
+This is why Bedard ($2.0M/yr surplus) looks more valuable than McDavid ($769K/yr surplus) in the surplus framework — Bedard's $950K cap hit is nearly free. But in production per year, McDavid ($13.3M) dominates.
 
-But in the production framework, McDavid ($13.3M) still dominates because his on-ice impact is elite. The "tax" of his contract doesn't reduce what he does on the ice.
+## Draft Pick Values
 
-## Pick Comparison
-
-For reference, draft picks valued at expected production:
+Picks are valued at expected production (mean WAR × $6M/WAR × NHL appearance rate). Future picks are discounted at 14%/year — an empirical rate learned from 604 historical trades.
 
 | Pick | Value |
 |------|-------|
@@ -74,24 +68,14 @@ For reference, draft picks valued at expected production:
 | 2026 1st | $2.0M |
 | 2027 1st | $1.8M |
 
-Future picks are discounted at ~14%/year (learned from 604 historical trades). This is much steeper than the 4% cap growth rate — the market prices in uncertainty about a team's future draft position.
+## Empirical Pick Discount Rate
 
-## Example Trade Analysis
+From analyzing 604 historical trades, the market discounts future picks at approximately **14% per year**:
 
-**Robertson + 2026 2nd for Bedard:**
-- Surplus: Robertson ($5.5M) + 2026 2nd ($1.3M) = $6.8M vs Bedard ($8.1M) → Bedard side wins by $1.3M
-- Production: Robertson ($26.6M) + 2026 2nd ($1.3M) = $27.9M vs Bedard ($17.8M) → Robertson side wins by $10.1M
+| Years Out | Implied Discount | Trades |
+|-----------|-----------------|--------|
+| Y+1 | 17.1% | 100 |
+| Y+2 | 12.7%/yr | 38 |
+| Y+3 | 13.9%/yr | 5 |
 
-The two methods disagree because Robertson's cap hit ($7.75M) is much higher than Bedard's ($950K). If you have the cap space, you'd rather have Robertson's production. If you're tight to the cap, Bedard's surplus is more useful.
-
-## Empirical Discount Rate for Future Picks
-
-From analyzing 604 historical trades, we found that the market discounts future draft picks at approximately **14% per year**:
-
-| Years Out | Implied Discount | Sample Size |
-|-----------|-----------------|-------------|
-| Y+1 | 17.1% | 100 trades |
-| Y+2 | 12.7%/yr | 38 trades |
-| Y+3 | 13.9%/yr | 5 trades |
-
-This is ~3.5x the salary cap growth rate (4%), reflecting the compounded uncertainty of: (a) not knowing the team's record, (b) not knowing which player will be available, and (c) the time value of having a productive player now vs three years from now.
+This is ~3.5x the salary cap growth rate (4%), reflecting compounded uncertainty about team record, draft quality, and the time value of having production now vs later.
