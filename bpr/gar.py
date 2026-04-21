@@ -115,7 +115,7 @@ penalties["player_id"] = penalties["player_id"].astype(int)
 sbg_cols = ["playerId", "season", "situation", "icetime",
             "faceoffsWon", "faceoffsLost", "penalties", "penaltiesDrawn",
             "I_F_goals", "I_F_xGoals", "I_F_primaryAssists"]
-sbg = pd.read_csv("data/skaters_by_game.csv", usecols=sbg_cols)
+sbg = pd.read_parquet("data/skaters_by_game.parquet", columns=sbg_cols)
 sbg = sbg.rename(columns={"playerId": "player_id"})
 
 print(f"  Pooled ratings: {len(pooled):,} players", file=sys.stderr)

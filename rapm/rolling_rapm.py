@@ -186,9 +186,9 @@ name_lookup = player_info.set_index("player_id")["player_name"].to_dict()
 pos_lookup = player_info.set_index("player_id")["position"].to_dict()
 
 # Supplement with skaters_by_game to pick up any players missing from pooled RAPM
-for _sbg_file in ["data/skaters_by_game.csv", "data/skaters_by_game2025.csv"]:
+for _sbg_file in ["data/skaters_by_game.parquet"]:
     if os.path.exists(_sbg_file):
-        _sbg = pd.read_csv(_sbg_file, usecols=["playerId", "name", "position"], low_memory=False)
+        _sbg = pd.read_parquet(_sbg_file, columns=["playerId", "name", "position"])
         _sbg = _sbg.dropna(subset=["playerId", "name"]).drop_duplicates("playerId")
         for _, _row in _sbg.iterrows():
             pid = int(_row["playerId"])

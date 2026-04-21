@@ -96,7 +96,7 @@ sbg_cols = [
     "xGoalsForAfterShifts", "xGoalsAgainstAfterShifts",
 ]
 
-sbg = pd.read_csv("data/skaters_by_game.csv", usecols=sbg_cols)
+sbg = pd.read_parquet("data/skaters_by_game.parquet", columns=sbg_cols)
 sbg = sbg.rename(columns={"playerId": "player_id", "gameId": "game_id", "name": "player_name"})
 
 sbg_5v5 = sbg[(sbg["situation"] == "5on5") & (sbg["season"] >= 2015)].copy()
@@ -555,7 +555,7 @@ season_last = (
 )
 
 # TOI
-sit = pd.read_csv("data/skaters_by_game.csv", usecols=["playerId", "season", "situation", "icetime"])
+sit = pd.read_parquet("data/skaters_by_game.parquet", columns=["playerId", "season", "situation", "icetime"])
 sit = sit.rename(columns={"playerId": "player_id"})
 sit_toi = (
     sit[sit["situation"].isin(["5on5", "5on4", "4on5"])]

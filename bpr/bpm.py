@@ -41,7 +41,7 @@ MIN_TOI_SEASON = 100  # minimum 5v5 TOI per season (minutes)
 # ── 1. Load data ─────────────────────────────────────────────────────────────
 print("Loading data...", file=sys.stderr)
 
-sbg = pd.read_csv("data/skaters_by_game.csv")
+sbg = pd.read_parquet("data/skaters_by_game.parquet")
 sbg = sbg.rename(columns={"playerId": "player_id", "name": "player_name", "gameId": "game_id"})
 
 # 5v5 only, 2015+

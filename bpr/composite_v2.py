@@ -28,7 +28,7 @@ RAPM_POOLED  = "output/v2_rapm_results.csv"
 RAPM_SEASON  = "output/v2_rapm_by_season.parquet"
 PRIOR_FILE   = "output/v2_box_prior.parquet"
 PP_RAPM      = "output/pp_rapm.csv"
-SKATERS_GAME = "data/skaters_by_game.csv"
+SKATERS_GAME = "data/skaters_by_game.parquet"
 OUT_POOLED   = "output/v2_final_ratings.parquet"
 OUT_SEASON   = "output/v2_final_ratings_by_season.parquet"
 
@@ -50,7 +50,7 @@ pp["player_id"] = pp["player_id"].astype(int)
 
 # Situational TOI
 print("Loading situational TOI...", file=sys.stderr)
-sit = pd.read_csv(SKATERS_GAME, usecols=["playerId", "season", "situation", "icetime"])
+sit = pd.read_parquet(SKATERS_GAME, columns=["playerId", "season", "situation", "icetime"])
 sit = sit.rename(columns={"playerId": "player_id"})
 sit_toi = (
     sit[sit["situation"].isin(["5on5", "5on4", "4on5"])]
@@ -184,7 +184,7 @@ print("\n  Computing on-ice/off-ice relative rates...", file=sys.stderr)
 rel_cols = ["playerId", "season", "situation", "icetime",
             "OnIce_F_xGoals", "OnIce_A_xGoals",
             "OffIce_F_xGoals", "OffIce_A_xGoals"]
-rel_sbg = pd.read_csv(SKATERS_GAME, usecols=rel_cols)
+rel_sbg = pd.read_parquet(SKATERS_GAME, columns=rel_cols)
 rel_sbg = rel_sbg.rename(columns={"playerId": "player_id"})
 rel_5v5 = rel_sbg[rel_sbg["situation"] == "5on5"].copy()
 

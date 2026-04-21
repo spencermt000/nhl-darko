@@ -171,10 +171,10 @@ def load_stats_names():
                         name_to_id[_row[name_col]] = int(_row[id_col])
 
     # Supplement with skaters_by_game (catches callups not in daily)
-    for sbg_file in ["data/skaters_by_game.csv", "data/skaters_by_game2025.csv"]:
+    for sbg_file in ["data/skaters_by_game.parquet"]:
         sbg_path = os.path.join(BASE, sbg_file)
         if os.path.exists(sbg_path):
-            sbg = pd.read_csv(sbg_path, usecols=["playerId", "name"], low_memory=False)
+            sbg = pd.read_parquet(sbg_path, columns=["playerId", "name"])
             sbg = sbg.dropna(subset=["playerId", "name"]).drop_duplicates("name")
             for _, row in sbg.iterrows():
                 if row["name"] not in name_to_id:

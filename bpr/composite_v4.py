@@ -71,8 +71,8 @@ print(f"  RAPM_O pop_var={pop_var_O:.4f}, RAPM_D pop_var={pop_var_D:.4f}", file=
 print("\nComputing next-season targets...", file=sys.stderr)
 
 # Impact target: from skaters_by_game.csv
-sbg = pd.read_csv("data/skaters_by_game.csv",
-                   usecols=["playerId", "season", "situation", "icetime",
+sbg = pd.read_parquet("data/skaters_by_game.parquet",
+                   columns=["playerId", "season", "situation", "icetime",
                             "OnIce_F_xGoals", "OnIce_A_xGoals",
                             "OffIce_F_xGoals", "OffIce_A_xGoals"])
 sbg = sbg.rename(columns={"playerId": "player_id"})
@@ -245,8 +245,8 @@ bpm["composite"] = bpm["composite_O"] + bpm["composite_D"]
 print("\n── Computing WAR ──", file=sys.stderr)
 
 # TOI by situation
-sit = pd.read_csv("data/skaters_by_game.csv",
-                   usecols=["playerId", "season", "situation", "icetime"])
+sit = pd.read_parquet("data/skaters_by_game.parquet",
+                   columns=["playerId", "season", "situation", "icetime"])
 sit = sit.rename(columns={"playerId": "player_id"})
 sit_toi = (
     sit[sit["situation"].isin(["5on5", "5on4", "4on5"])]

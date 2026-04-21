@@ -33,8 +33,8 @@ MIN_SEASON = 2015
 # ── Phase A: Compute iFinish per player-season ────────────────────────────────
 print("Phase A: Computing individual finishing (iFinish)...", file=sys.stderr)
 
-sbg = pd.read_csv("data/skaters_by_game.csv",
-                   usecols=["playerId", "season", "situation", "icetime",
+sbg = pd.read_parquet("data/skaters_by_game.parquet",
+                   columns=["playerId", "season", "situation", "icetime",
                             "I_F_goals", "I_F_xGoals", "I_F_shotsOnGoal",
                             "OnIce_F_xGoals", "OnIce_A_xGoals",
                             "OffIce_F_xGoals", "OffIce_A_xGoals",

@@ -29,15 +29,8 @@ war = pd.read_csv(os.path.join(OUTPUT, "v5_daily_war.csv"))
 team_season = pd.read_csv(os.path.join(OUTPUT, "v6_team_season_ratings.csv"))
 
 # Skaters by game (for player-team mapping)
-sbg = pd.read_csv(os.path.join(DATA, "skaters_by_game.csv"),
-                  usecols=["playerId", "season", "playerTeam", "situation", "icetime"],
-                  low_memory=False)
-sbg_2025 = os.path.join(DATA, "skaters_by_game2025.csv")
-if os.path.exists(sbg_2025):
-    sbg2 = pd.read_csv(sbg_2025,
-                       usecols=["playerId", "season", "playerTeam", "situation", "icetime"],
-                       low_memory=False)
-    sbg = pd.concat([sbg, sbg2], ignore_index=True)
+_sbg_cols = ["playerId", "season", "playerTeam", "situation", "icetime"]
+sbg = pd.read_parquet(os.path.join(DATA, "skaters_by_game.parquet"), columns=_sbg_cols)
 
 # ── 2. Build player-team mapping ────────────────────────────────────────────
 # Pattern from validate_war.py:112-120

@@ -316,8 +316,8 @@ print(f"\nCarry-forward: {len(cf):,} player-seasons", file=sys.stderr)
 # ── 5. Compute WAR ──────────────────────────────────────────────────────────
 print("\nComputing WAR...", file=sys.stderr)
 
-sit = pd.read_csv("data/skaters_by_game.csv",
-                   usecols=["playerId", "season", "situation", "icetime"])
+sit = pd.read_parquet("data/skaters_by_game.parquet",
+                   columns=["playerId", "season", "situation", "icetime"])
 sit = sit.rename(columns={"playerId": "player_id"})
 sit["player_id"] = sit["player_id"].astype(int)
 sit_toi = (

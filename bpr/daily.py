@@ -77,7 +77,7 @@ sbg_cols = [
     "OnIce_A_xGoals",
     "penalties", "penaltiesDrawn",
 ]
-sbg = pd.read_csv("data/skaters_by_game.csv", usecols=sbg_cols)
+sbg = pd.read_parquet("data/skaters_by_game.parquet", columns=sbg_cols)
 sbg = sbg.rename(columns={"playerId": "player_id", "name": "player_name",
                            "gameId": "game_id", "gameDate": "game_date"})
 sbg["player_id"] = sbg["player_id"].astype(int)

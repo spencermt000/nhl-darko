@@ -31,7 +31,7 @@ cf = pd.read_csv(f'{OUTPUT}/v6_carry_forward.csv')
 box_cols = ['playerId', 'season', 'situation', 'icetime',
             'I_F_goals', 'I_F_primaryAssists', 'I_F_secondaryAssists',
             'I_F_points', 'I_F_shotsOnGoal', 'I_F_xGoals']
-box = pd.read_csv(f'{DATA}/skaters_by_game.csv', usecols=box_cols)
+box = pd.read_parquet(f'{DATA}/skaters_by_game.parquet', columns=box_cols)
 box_all = box[box['situation'] == 'all']
 box_season = box_all.groupby(['playerId', 'season']).agg(
     GP=('icetime', 'count'),

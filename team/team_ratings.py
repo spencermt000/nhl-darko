@@ -133,7 +133,7 @@ def build_pregame_ratings():
     dr = pd.read_parquet("output/v5_daily_ratings.parquet")
 
     print("  Loading skaters_by_game for team mapping...")
-    sk = pd.read_csv("data/skaters_by_game.csv", usecols=[
+    sk = pd.read_parquet("data/skaters_by_game.parquet", columns=[
         "playerId", "gameId", "playerTeam", "home_or_away", "situation", "icetime",
     ])
     sk = sk[sk["situation"] == "all"].rename(columns={
