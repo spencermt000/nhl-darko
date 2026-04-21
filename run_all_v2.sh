@@ -12,7 +12,7 @@ echo "" >> "$LOG"
 log "===== run_all_v2.sh started ====="
 
 log "Step 1/8: build_dataset.py (enriched PBP with zone starts, goalies, penalties)..."
-$VENV supporting/build_dataset.py 2>&1 | tee -a "$LOG"
+$VENV prep/build_dataset.py 2>&1 | tee -a "$LOG"
 log "build_dataset.py done."
 
 log "Step 2/8: rapm_bayesian.py --mode=raw (uninformed RAPM, training target for box_prior)..."

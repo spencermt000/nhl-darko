@@ -60,12 +60,12 @@ ROOKIE_PRIOR_SE_D = 0.20
 # ── 1. Load data ─────────────────────────────────────────────────────────────
 print("Loading data...", file=sys.stderr)
 
-comp = pd.read_csv("output/v5_composite_player_seasons.csv")
+comp = pd.read_parquet("output/v5_composite_player_seasons.parquet")
 comp["player_id"] = comp["player_id"].astype(int)
 print(f"  Composite: {len(comp):,} player-seasons", file=sys.stderr)
 
 # Daily ratings: just need GP per player-season
-daily = pd.read_csv("output/v5_daily_ratings.csv", usecols=["player_id", "season", "game_id"])
+daily = pd.read_parquet("output/v5_daily_ratings.parquet", columns=["player_id", "season", "game_id"])
 daily["player_id"] = daily["player_id"].astype(int)
 daily_gp = daily.groupby(["player_id", "season"]).size().reset_index(name="daily_GP")
 print(f"  Daily GP records: {len(daily_gp):,}", file=sys.stderr)
@@ -78,8 +78,8 @@ birth_year_map = bio.set_index("player_id")["birth_year"].to_dict()
 
 # Per-season PP/PK from GAR
 try:
-    gar = pd.read_csv("output/v2_gar_by_season.csv",
-                       usecols=["player_id", "season", "PP_GAR", "PK_GAR",
+    gar = pd.read_parquet("output/v2_gar_by_season.parquet",
+                       columns=["player_id", "season", "PP_GAR", "PK_GAR",
                                 "toi_pp", "toi_pk"])
     gar["player_id"] = gar["player_id"].astype(int)
     gar["PP_rate"] = np.where(gar["toi_pp"] > 10,
@@ -379,7 +379,7 @@ cf["WAR_82"] = (cf["WAR"] * 82 / cf["GP"].clip(lower=1)).round(2)
 print("\n── Saving ──", file=sys.stderr)
 
 cf = cf.sort_values(["season", "player_name"])
-cf.to_csv("output/v6_carry_forward.csv", index=False)
+cf.to_parquet("output/v6_carry_forward.parquet", index=False)
 print(f"  {len(cf):,} rows → output/v6_carry_forward.csv", file=sys.stderr)
 
 

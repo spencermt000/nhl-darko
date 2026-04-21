@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import numpy as np
 
-d = pd.read_csv("output/v5_daily_ratings.csv")
+d = pd.read_parquet("output/v5_daily_ratings.parquet")
 mc = d[(d["player_name"] == "Connor McDavid") & (d["season"] == 2025)].copy()
 mc["game_date"] = pd.to_datetime(mc["game_date"])
 

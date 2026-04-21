@@ -53,8 +53,8 @@ goalie_ids = set(
 print(f"  {len(goalie_ids)} goalie IDs to exclude", file=sys.stderr)
 
 # ── Load PBP ─────────────────────────────────────────────────────────────────
-print("Loading clean_pbp.csv...", file=sys.stderr)
-df = pd.read_csv("output/clean_pbp.csv")
+print("Loading v2_clean_pbp.csv...", file=sys.stderr)
+df = pd.read_parquet("output/v2_clean_pbp.parquet")
 df = df[
     (df["strength"] == STRENGTH_FILTER) &
     df["home_on_ice"].notna() &

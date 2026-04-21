@@ -175,12 +175,12 @@ def fit_window(frame, X, skater_ids):
 
 # ── Load data ────────────────────────────────────────────────────────────────
 print("Loading v2_clean_pbp.csv...", file=sys.stderr)
-df = pd.read_csv("output/v2_clean_pbp.csv")
+df = pd.read_parquet("output/v2_clean_pbp.parquet")
 df = df[df["strength_state"] == STRENGTH_FILTER].copy()
 print(f"  {len(df):,} 5v5 events", file=sys.stderr)
 
 # Player name/position lookup — combine pooled RAPM with skaters_by_game for full coverage
-player_info = pd.read_csv("output/v2_final_ratings.csv", usecols=["player_id", "player_name", "position"])
+player_info = pd.read_parquet("output/v2_final_ratings.parquet", columns=["player_id", "player_name", "position"])
 player_info["player_id"] = player_info["player_id"].astype(int)
 name_lookup = player_info.set_index("player_id")["player_name"].to_dict()
 pos_lookup = player_info.set_index("player_id")["position"].to_dict()
@@ -268,7 +268,7 @@ for m in METRICS:
 
 key_cols = [c for c in key_cols if c in rolling_df.columns]
 rolling_df = rolling_df[key_cols]
-rolling_df.to_csv("output/v3_rolling_rapm.csv", index=False)
+rolling_df.to_parquet("output/v3_rolling_rapm.parquet", index=False)
 print(f"  {len(rolling_df):,} player-window rows → output/v3_rolling_rapm.csv", file=sys.stderr)
 
 # Latest window per player: the most recent window they appear in
@@ -278,7 +278,7 @@ latest = (
     .first()
     .reset_index()
 )
-latest.to_csv("output/v3_rolling_rapm_latest.csv", index=False)
+latest.to_parquet("output/v3_rolling_rapm_latest.parquet", index=False)
 print(f"  {len(latest):,} players (latest window) → output/v3_rolling_rapm_latest.csv", file=sys.stderr)
 
 # Check key players

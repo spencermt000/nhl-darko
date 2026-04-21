@@ -113,7 +113,7 @@ print(f"  Shrunk iFinish YoY r = {r_shrunk:.3f}", file=sys.stderr)
 # Save iFinish
 ifinish_out = ifinish[["player_id", "season", "toi_min", "goals", "xgoals", "shots",
                         "iFinish_raw", "iFinish_per60", "iFinish_shrunk"]].copy()
-ifinish_out.to_csv("output/ifinish_by_season.csv", index=False)
+ifinish_out.to_parquet("output/ifinish_by_season.parquet", index=False)
 print(f"  Saved output/ifinish_by_season.csv ({len(ifinish_out):,} rows)", file=sys.stderr)
 
 
@@ -121,7 +121,7 @@ print(f"  Saved output/ifinish_by_season.csv ({len(ifinish_out):,} rows)", file=
 print("\nPhase C: Building feature matrix + next-season targets...", file=sys.stderr)
 
 # Load per-metric RAPM (use blended final ratings — same data gar.py consumes)
-rapm = pd.read_csv("output/v2_final_ratings_by_season.csv")
+rapm = pd.read_parquet("output/v2_final_ratings_by_season.parquet")
 rapm["player_id"] = rapm["player_id"].astype(int)
 
 # Merge RAPM with iFinish

@@ -25,12 +25,12 @@ import pandas as pd
 
 # ── Config ──────────────────────────────────────────────────────────────────
 RAPM_POOLED  = "output/v2_rapm_results.csv"
-RAPM_SEASON  = "output/v2_rapm_by_season.csv"
-PRIOR_FILE   = "output/v2_box_prior.csv"
+RAPM_SEASON  = "output/v2_rapm_by_season.parquet"
+PRIOR_FILE   = "output/v2_box_prior.parquet"
 PP_RAPM      = "output/pp_rapm.csv"
 SKATERS_GAME = "data/skaters_by_game.csv"
-OUT_POOLED   = "output/v2_final_ratings.csv"
-OUT_SEASON   = "output/v2_final_ratings_by_season.csv"
+OUT_POOLED   = "output/v2_final_ratings.parquet"
+OUT_SEASON   = "output/v2_final_ratings_by_season.parquet"
 
 # ── Load data ──────────────────────────────────────────────────────────────
 print("Loading v2 RAPM results...", file=sys.stderr)

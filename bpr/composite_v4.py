@@ -49,7 +49,7 @@ D_FEATURES = ["GV_D", "OOI_D", "RAPM_D_shrunk", "ozPct", "dzPct", "isD"]
 # ── 1. Load & prepare ────────────────────────────────────────────────────────
 print("Loading data...", file=sys.stderr)
 
-bpm = pd.read_csv("output/v4_bpm_player_seasons.csv")
+bpm = pd.read_parquet("output/v4_bpm_player_seasons.parquet")
 bpm["player_id"] = bpm["player_id"].astype(int)
 bpm["isD"] = (bpm["position"] == "D").astype(float)
 print(f"  BPM player-seasons: {len(bpm):,}", file=sys.stderr)
@@ -336,7 +336,7 @@ for c in ["composite_O", "composite_D", "composite", "PV_O", "PV_D", "IV_O", "IV
     if c in comp_out.columns:
         comp_out[c] = comp_out[c].round(4)
 comp_out = comp_out.sort_values(["season", "player_name"])
-comp_out.to_csv("output/v5_composite_player_seasons.csv", index=False)
+comp_out.to_parquet("output/v5_composite_player_seasons.parquet", index=False)
 print(f"  {len(comp_out):,} rows → output/v5_composite_player_seasons.csv", file=sys.stderr)
 
 # Season WAR
@@ -355,7 +355,7 @@ for c in ["composite_O", "composite_D", "PV_O", "PV_D", "IV_O", "IV_D"]:
     if c in war_out.columns:
         war_out[c] = war_out[c].round(4)
 war_out = war_out.sort_values(["season", "WAR"], ascending=[True, False])
-war_out.to_csv("output/v5_season_war.csv", index=False)
+war_out.to_parquet("output/v5_season_war.parquet", index=False)
 print(f"  {len(war_out):,} rows → output/v5_season_war.csv", file=sys.stderr)
 
 

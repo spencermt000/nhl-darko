@@ -108,7 +108,7 @@ print(f"  5v5 player-games: {len(sbg_5v5):,}", file=sys.stderr)
 
 # Rolling RAPM (training target — not needed in apply-only mode)
 if not APPLY_ONLY:
-    rolling = pd.read_csv("output/v3_rolling_rapm.csv")
+    rolling = pd.read_parquet("output/v3_rolling_rapm.parquet")
     rolling["player_id"] = rolling["player_id"].astype(int)
     print(f"  Rolling RAPM: {len(rolling):,} player-windows", file=sys.stderr)
 
@@ -440,7 +440,7 @@ print(f"  xGI_D: mean={df['xGI_D_raw'].mean():.4f}, std={df['xGI_D_raw'].std():.
 # Save raw per-game predictions (used by daily.py for Bayesian smoothing)
 raw_out = df[["player_id", "player_name", "position", "game_id", "season",
               "game_date", "toi_min", "xGI_O_raw", "xGI_D_raw"]].copy()
-raw_out.to_csv("output/v4_epm_raw_per_game.csv", index=False)
+raw_out.to_parquet("output/v4_epm_raw_per_game.parquet", index=False)
 print(f"  Saved {len(raw_out):,} rows → output/v4_epm_raw_per_game.csv", file=sys.stderr)
 
 if not APPLY_ONLY:
@@ -540,7 +540,7 @@ for pi, pid in enumerate(player_ids):
         })
 
 daily = pd.DataFrame(smoothed)
-daily.to_csv("output/v4_daily_epm.csv", index=False)
+daily.to_parquet("output/v4_daily_epm.parquet", index=False)
 print(f"\n  {len(daily):,} rows → output/v4_daily_epm.csv", file=sys.stderr)
 
 
@@ -618,7 +618,7 @@ out_cols = [
 ]
 out_cols = [c for c in out_cols if c in sw.columns]
 sw_out = sw[out_cols].sort_values(["season", "WAR"], ascending=[True, False])
-sw_out.to_csv("output/v4_season_war.csv", index=False)
+sw_out.to_parquet("output/v4_season_war.parquet", index=False)
 print(f"  {len(sw_out):,} player-seasons → output/v4_season_war.csv", file=sys.stderr)
 
 # Leaderboards

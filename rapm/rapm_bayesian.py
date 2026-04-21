@@ -18,6 +18,7 @@ Output:
   output/v2_rapm_by_season.csv    (--mode=prior) Prior-informed per-season ratings
 """
 
+import os
 import sys
 import json
 import numpy as np
@@ -63,7 +64,7 @@ SCORE_REF    = "tied"
 
 # ── Load PBP ─────────────────────────────────────────────────────────────────
 print("Loading v2_clean_pbp.csv...", file=sys.stderr)
-df = pd.read_csv("output/v2_clean_pbp.csv")
+df = pd.read_parquet("output/v2_clean_pbp.parquet")
 df = df[
     (df["strength_state"] == STRENGTH_FILTER) &
     df["home_on_ice"].notna() &
@@ -104,11 +105,13 @@ del _raw
 
 # ── Position lookup ──────────────────────────────────────────────────────────
 print("Building position lookup...", file=sys.stderr)
-_mp_pos = pd.read_csv(
-    "data/shots_2007-2024.csv",
-    usecols=["shooterPlayerId", "playerPositionThatDidEvent"],
-    dtype={"shooterPlayerId": "Int64"},
-).dropna(subset=["shooterPlayerId"])
+_shots_pos_file = "data/shots_2007-2024.parquet" if os.path.exists("data/shots_2007-2024.parquet") else "data/shots_2007-2024.csv"
+_pos_cols = ["shooterPlayerId", "playerPositionThatDidEvent"]
+if _shots_pos_file.endswith(".parquet"):
+    _mp_pos = pd.read_parquet(_shots_pos_file, columns=_pos_cols)
+else:
+    _mp_pos = pd.read_csv(_shots_pos_file, usecols=_pos_cols, dtype={"shooterPlayerId": "Int64"})
+_mp_pos = _mp_pos.dropna(subset=["shooterPlayerId"])
 _mp_pos["shooterPlayerId"] = _mp_pos["shooterPlayerId"].astype(int)
 _mp_pos["pos"] = _mp_pos["playerPositionThatDidEvent"].map(
     lambda p: "F" if p in ("C", "L", "R") else ("D" if p == "D" else None)
@@ -595,7 +598,7 @@ elif MODE == "prior":
             raw_alphas = json.load(f)
         print(f"  Using raw RAPM alphas: {raw_alphas}", file=sys.stderr)
 
-    prior_df = pd.read_csv("output/v2_box_prior.csv")
+    prior_df = pd.read_parquet("output/v2_box_prior.parquet")
     prior_df["player_id"] = prior_df["player_id"].astype(int)
 
     # Build pooled prior: average across seasons per player
@@ -695,6 +698,6 @@ elif MODE == "prior":
 
     if season_frames:
         all_seasons = pd.concat(season_frames, ignore_index=True)
-        all_seasons.to_csv("output/v2_rapm_by_season.csv", index=False)
+        all_seasons.to_parquet("output/v2_rapm_by_season.parquet", index=False)
         print(f"\nWrote {len(all_seasons):,} player-season rows to output/v2_rapm_by_season.csv",
               file=sys.stderr)

@@ -46,7 +46,7 @@ from pathlib import Path
 
 # ── BPR weights: try learned, fall back to hand-coded ────────────────────────
 LEARNED_WEIGHTS_FILE = Path("output/learned_bpr_weights.json")
-IFINISH_FILE = Path("output/ifinish_by_season.csv")
+IFINISH_FILE = Path("output/ifinish_by_season.parquet")
 
 if LEARNED_WEIGHTS_FILE.exists():
     with open(LEARNED_WEIGHTS_FILE) as f:
@@ -98,8 +98,8 @@ RL_PERCENTILE = 17                  # replacement level: 17th percentile qualifi
 # ── 1. Load data ─────────────────────────────────────────────────────────────
 print("Loading data...", file=sys.stderr)
 
-pooled = pd.read_csv("output/v2_final_ratings.csv")
-by_season = pd.read_csv("output/v2_final_ratings_by_season.csv")
+pooled = pd.read_parquet("output/v2_final_ratings.parquet")
+by_season = pd.read_parquet("output/v2_final_ratings_by_season.parquet")
 pooled["player_id"] = pooled["player_id"].astype(int)
 by_season["player_id"] = by_season["player_id"].astype(int)
 
@@ -108,7 +108,7 @@ pp_rapm = pd.read_csv("output/pp_rapm.csv")[["player_id", "PP_O", "PK_D"]]
 pp_rapm["player_id"] = pp_rapm["player_id"].astype(int)
 
 # Penalties from PBP
-penalties = pd.read_csv("output/v2_penalties.csv")
+penalties = pd.read_parquet("output/v2_penalties.parquet")
 penalties["player_id"] = penalties["player_id"].astype(int)
 
 # Skaters by game (faceoffs, penalty counts, all-situations TOI, PP production)
@@ -496,7 +496,7 @@ gar_detail_cols = ["fo_won", "fo_lost", "pen_taken", "pen_drawn"]
 
 out_cols_pooled = [c for c in gar_cols_base + gar_se_cols + gar_detail_cols if c in pooled_gar.columns]
 pooled_out = pooled_gar[out_cols_pooled].sort_values("WAR", ascending=False)
-pooled_out.to_csv("output/v2_gar_pooled.csv", index=False)
+pooled_out.to_parquet("output/v2_gar_pooled.parquet", index=False)
 print(f"\nPooled GAR: {len(pooled_out):,} players → output/v2_gar_pooled.csv", file=sys.stderr)
 
 # Print top 20
@@ -516,7 +516,7 @@ season_gar = build_gar(
 out_cols_season = ["season"] + [c for c in out_cols_pooled if c != "season"]
 out_cols_season = [c for c in out_cols_season if c in season_gar.columns]
 season_out = season_gar[out_cols_season].sort_values(["season", "WAR"], ascending=[True, False])
-season_out.to_csv("output/v2_gar_by_season.csv", index=False)
+season_out.to_parquet("output/v2_gar_by_season.parquet", index=False)
 print(f"\nPer-season GAR: {len(season_out):,} player-seasons → output/v2_gar_by_season.csv", file=sys.stderr)
 
 # Print top 20 recent seasons
@@ -530,8 +530,8 @@ print("\n── Computing goalie WAR ──", file=sys.stderr)
 print("  Building GSAx from event-level data (all strengths)...", file=sys.stderr)
 
 # Load shots from clean PBP — all strengths, not just 5v5
-pbp_goalie = pd.read_csv("output/v2_clean_pbp.csv",
-    usecols=["season", "event_team_type", "home_goalie_id", "away_goalie_id",
+pbp_goalie = pd.read_parquet("output/v2_clean_pbp.parquet",
+    columns=["season", "event_team_type", "home_goalie_id", "away_goalie_id",
              "xGoal", "is_goal", "is_shot_on_goal"])
 
 shots = pbp_goalie[pbp_goalie["is_shot_on_goal"] == 1].copy()

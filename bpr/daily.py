@@ -64,7 +64,7 @@ EV_TO_PER60 = 6.0
 print("Loading data...", file=sys.stderr)
 
 # EV raw per-game predictions from epm.py
-epm = pd.read_csv("output/v4_epm_raw_per_game.csv")
+epm = pd.read_parquet("output/v4_epm_raw_per_game.parquet")
 epm = epm.rename(columns={"player_id": "player_id", "game_id": "game_id"})
 epm["player_id"] = epm["player_id"].astype(int)
 print(f"  EPM raw: {len(epm):,} rows", file=sys.stderr)
@@ -89,8 +89,8 @@ sbg["game_date"] = pd.to_datetime(sbg["game_date"].astype(str), format="%Y%m%d")
 print(f"  Skaters by game: {len(sbg):,} rows", file=sys.stderr)
 
 # Composite player-seasons (for EV priors)
-composite = pd.read_csv("output/v5_composite_player_seasons.csv",
-                         usecols=["player_id", "season", "composite_O", "composite_D"])
+composite = pd.read_parquet("output/v5_composite_player_seasons.parquet",
+                         columns=["player_id", "season", "composite_O", "composite_D"])
 composite["player_id"] = composite["player_id"].astype(int)
 
 # PP/PK RAPM (career priors)
@@ -350,7 +350,7 @@ for pi, pid in enumerate(player_ids):
         })
 
 daily = pd.DataFrame(smoothed)
-daily.to_csv("output/v5_daily_ratings.csv", index=False)
+daily.to_parquet("output/v5_daily_ratings.parquet", index=False)
 print(f"\n  {len(daily):,} rows → output/v5_daily_ratings.csv", file=sys.stderr)
 
 
@@ -441,7 +441,7 @@ war_cols = [
 ]
 war_cols = [c for c in war_cols if c in war.columns]
 war_out = war[war_cols].sort_values(["season", "WAR"], ascending=[True, False])
-war_out.to_csv("output/v5_daily_war.csv", index=False)
+war_out.to_parquet("output/v5_daily_war.parquet", index=False)
 print(f"  {len(war_out):,} player-seasons → output/v5_daily_war.csv", file=sys.stderr)
 
 

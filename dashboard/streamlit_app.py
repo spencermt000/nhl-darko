@@ -23,6 +23,107 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUTPUT = os.path.join(BASE, "output")
 CONTRACTS = os.path.join(BASE, "contracts")
 
+# ── R2 auto-download ────────────────────────────────────────────────────────
+
+_R2_DASHBOARD_FILES = [
+    "output/v5_daily_ratings_deploy.csv",
+    "output/v5_daily_war.parquet",
+    "output/v4_bpm_player_seasons.parquet",
+    "output/v5_composite_player_seasons.parquet",
+    "output/v5_season_war.parquet",
+    "output/v3_rolling_rapm_latest.parquet",
+    "output/v6_carry_forward.parquet",
+    "output/dashboard_skater_war.csv",
+    "output/dashboard_goalie_war.csv",
+    "output/dashboard_combined_war.csv",
+    "output/win_shares_by_season.parquet",
+    "output/v2_goalie_war.csv",
+    "output/v2_goalie_war_by_season.csv",
+    "output/v2_rapm_results.csv",
+    "output/v2_rapm_by_season.parquet",
+    "output/v2_gar_by_season.parquet",
+    "output/v2_gar_pooled.parquet",
+    "output/ifinish_by_season.parquet",
+    "output/v3_rolling_rapm.parquet",
+    "output/v6_team_season_ratings.csv",
+    "output/learned_bpr_weights.json",
+    "output/v2_prior_calibration.json",
+    "contracts/active_contracts_by_season.csv",
+    "contracts/surplus_values_v2.csv",
+    "contracts/career_surplus_v2.csv",
+    "contracts/fa_projections_2026.csv",
+    "contracts/player_projections_2026.csv",
+    "contracts/draft_pick_value_chart.csv",
+    "contracts/draft_pick_value_detail.csv",
+    "contracts/draft_round_value_chart.csv",
+    "data/skaters_by_game_deploy.csv",
+    "data/skaters_by_game2025_deploy.csv",
+    "data/moneypuck_player_bio.csv",
+    "data/nhl_draft_picks.csv",
+]
+
+
+def _load_r2_env():
+    """Load .env.local credentials into environment if not already set."""
+    env_path = os.path.join(BASE, ".env.local")
+    if os.path.exists(env_path):
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, _, val = line.partition("=")
+                    os.environ.setdefault(key.strip(), val.strip())
+
+
+def _maybe_download_from_r2(status_placeholder=None):
+    """
+    Download any missing dashboard files from Cloudflare R2.
+    Only runs if R2_ENDPOINT is configured and files are absent locally.
+    Returns the count of files downloaded.
+    """
+    _load_r2_env()
+    endpoint = os.environ.get("R2_ENDPOINT")
+    access_key = os.environ.get("R2_ACCESS_KEY_ID")
+    secret_key = os.environ.get("R2_SECRET_ACCESS_KEY")
+    bucket = os.environ.get("R2_BUCKET_NAME", "nhl")
+
+    if not all([endpoint, access_key, secret_key]):
+        return 0
+
+    missing = [p for p in _R2_DASHBOARD_FILES if not os.path.exists(os.path.join(BASE, p))]
+    if not missing:
+        return 0
+
+    try:
+        import boto3
+        from botocore.exceptions import ClientError
+    except ImportError:
+        if status_placeholder:
+            status_placeholder.warning("boto3 not installed — cannot download from R2. Run: pip install boto3")
+        return 0
+
+    client = boto3.client(
+        "s3",
+        endpoint_url=endpoint,
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key,
+        region_name="auto",
+    )
+
+    downloaded = 0
+    for rel_path in missing:
+        local_path = os.path.join(BASE, rel_path)
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        if status_placeholder:
+            status_placeholder.info(f"Downloading {rel_path} from R2...")
+        try:
+            client.download_file(bucket, rel_path, local_path)
+            downloaded += 1
+        except ClientError:
+            pass  # file may not exist in R2 yet
+
+    return downloaded
+
 COLORS = {
     "EV_O": "#1f77b4", "EV_D": "#d62728", "PP": "#ff7f0e",
     "PK": "#9467bd", "PEN": "#2ca02c",
@@ -36,10 +137,28 @@ def season_label(s):
     return f"{int(s)}-{str(int(s)+1)[-2:]}"
 
 
+def _pq(path, **kwargs):
+    """Read parquet if available, else fall back to CSV. Handles usecols→columns."""
+    pq = path.replace(".csv", ".parquet")
+    if os.path.exists(pq):
+        cols = kwargs.pop("usecols", kwargs.pop("columns", None))
+        kwargs.pop("low_memory", None)
+        return pd.read_parquet(pq, columns=cols)
+    return pd.read_csv(path, **kwargs)
+
+
 # ── Load data (cached) ──────────────────────────────────────────────────────
 
 @st.cache_data
 def load_data():
+    # Download any missing files from R2 before loading
+    _r2_status = st.empty()
+    n_downloaded = _maybe_download_from_r2(status_placeholder=_r2_status)
+    if n_downloaded:
+        _r2_status.success(f"Downloaded {n_downloaded} data file(s) from R2.")
+    else:
+        _r2_status.empty()
+
     # Prefer trimmed deploy files if available (for Streamlit Cloud deployment)
     _daily_path = os.path.join(OUTPUT, "v5_daily_ratings_deploy.csv")
     if not os.path.exists(_daily_path):
@@ -69,17 +188,16 @@ def load_data():
     else:
         daily["matchup"] = ""
 
-    daily_war = pd.read_csv(os.path.join(OUTPUT, "v5_daily_war.csv"))
-    bpm = pd.read_csv(os.path.join(OUTPUT, "v4_bpm_player_seasons.csv"))
-    composite = pd.read_csv(os.path.join(OUTPUT, "v5_composite_player_seasons.csv"))
-    composite_war = pd.read_csv(os.path.join(OUTPUT, "v5_season_war.csv"))
-    rapm_latest = pd.read_csv(os.path.join(OUTPUT, "v3_rolling_rapm_latest.csv"))
-    # Box score stats (goals, assists, shots, etc.)
+    daily_war = _pq(os.path.join(OUTPUT, "v5_daily_war.csv"))
+    bpm = _pq(os.path.join(OUTPUT, "v4_bpm_player_seasons.csv"))
+    composite = _pq(os.path.join(OUTPUT, "v5_composite_player_seasons.csv"))
+    composite_war = _pq(os.path.join(OUTPUT, "v5_season_war.csv"))
+    rapm_latest = _pq(os.path.join(OUTPUT, "v3_rolling_rapm_latest.csv"))
     skater_box = pd.read_csv(os.path.join(OUTPUT, "dashboard_skater_war.csv"))
 
     # Win Shares
     ws_path = os.path.join(OUTPUT, "win_shares_by_season.csv")
-    win_shares = pd.read_csv(ws_path) if os.path.exists(ws_path) else None
+    win_shares = _pq(ws_path) if os.path.exists(ws_path) or os.path.exists(ws_path.replace(".csv", ".parquet")) else None
 
     # Contracts: season-aware lookup table
     active_contracts_path = os.path.join(CONTRACTS, "active_contracts_by_season.csv")

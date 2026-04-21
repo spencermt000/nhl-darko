@@ -25,8 +25,8 @@ from scipy import sparse
 from sklearn.linear_model import RidgeCV
 from pathlib import Path
 
-CLEAN_PBP   = Path("output/clean_pbp.csv")
-RAPM_POOLED = Path("output/rapm_results.csv")
+CLEAN_PBP   = Path("output/v2_clean_pbp.parquet")
+RAPM_POOLED = Path("output/v2_rapm_results.csv")
 BIO_FILE    = Path("data/moneypuck_player_bio.csv")
 OUT_PP      = Path("output/pp_rapm.csv")
 

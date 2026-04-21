@@ -53,7 +53,7 @@ ROLLING_WINDOW = 10  # games for team rolling stats
 def build_game_outcomes():
     """Build one row per game with goals, xG, and goalie IDs."""
     print("  Loading PBP...")
-    pbp = pd.read_csv("output/v2_clean_pbp.csv", usecols=[
+    pbp = pd.read_parquet("output/v2_clean_pbp.parquet", columns=[
         "game_id", "season", "event_team_type", "period", "is_goal", "xGoal",
         "home_goalie_id", "away_goalie_id",
     ])
@@ -130,7 +130,7 @@ def build_pregame_ratings():
     """Join daily ratings with team/TOI info, shift to get pre-game values.
     Also joins prior-season metrics (BPR, composite, GAR) for talent priors."""
     print("  Loading daily ratings...")
-    dr = pd.read_csv("output/v5_daily_ratings.csv")
+    dr = pd.read_parquet("output/v5_daily_ratings.parquet")
 
     print("  Loading skaters_by_game for team mapping...")
     sk = pd.read_csv("data/skaters_by_game.csv", usecols=[
@@ -155,22 +155,22 @@ def build_pregame_ratings():
     print("  Loading prior-season metrics (composite, BPR, GAR)...")
 
     # Composite: per-season ensemble blend
-    comp = pd.read_csv("output/v5_composite_player_seasons.csv",
-                        usecols=["player_id", "season"] + PRIOR_COMPOSITE_COLS)
+    comp = pd.read_parquet("output/v5_composite_player_seasons.parquet",
+                        columns=["player_id", "season"] + PRIOR_COMPOSITE_COLS)
     comp = comp.rename(columns={c: f"prior_{c}" for c in PRIOR_COMPOSITE_COLS})
     comp["season"] = comp["season"] + 1  # lag: season N metrics → available for season N+1 games
     merged = merged.merge(comp, on=["player_id", "season"], how="left")
 
     # BPR: Bayesian RAPM blend
-    bpr = pd.read_csv("output/v2_final_ratings_by_season.csv",
-                       usecols=["player_id", "season"] + PRIOR_BPR_COLS)
+    bpr = pd.read_parquet("output/v2_final_ratings_by_season.parquet",
+                       columns=["player_id", "season"] + PRIOR_BPR_COLS)
     bpr = bpr.rename(columns={c: f"prior_{c}" for c in PRIOR_BPR_COLS})
     bpr["season"] = bpr["season"] + 1
     merged = merged.merge(bpr, on=["player_id", "season"], how="left")
 
     # GAR components: skill vs luck decomposition
-    gar = pd.read_csv("output/v2_gar_by_season.csv",
-                       usecols=["player_id", "season"] + PRIOR_GAR_COLS)
+    gar = pd.read_parquet("output/v2_gar_by_season.parquet",
+                       columns=["player_id", "season"] + PRIOR_GAR_COLS)
     gar = gar.rename(columns={c: f"prior_{c}" for c in PRIOR_GAR_COLS})
     gar["season"] = gar["season"] + 1
     merged = merged.merge(gar, on=["player_id", "season"], how="left")
@@ -750,7 +750,7 @@ def main():
                 "home_goals", "away_goals", "goal_diff", "home_win"]
     # Only include columns that exist
     out_cols = [c for c in out_cols if c in matchup.columns]
-    matchup[out_cols].to_csv("output/v6_team_game_ratings.csv", index=False)
+    matchup[out_cols].to_parquet("output/v6_team_game_ratings.parquet", index=False)
     print(f"\n  Saved output/v6_team_game_ratings.csv ({len(matchup)} rows)")
 
     season_ratings.to_csv("output/v6_team_season_ratings.csv", index=False)

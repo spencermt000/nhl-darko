@@ -12,8 +12,7 @@ Inputs:
   data/skaters_by_game.csv       Per-game box scores
   data/moneypuck_player_bio.csv  Player bio (position, birthdate)
   data/v2_penalties.csv          Penalty data (from build_dataset.py)
-  data/rapm_results.csv          Pooled RAPM (training target for initial calibration)
-                                 OR data/v2_rapm_raw.csv if available
+  output/v2_rapm_raw.csv         Pooled RAPM (training target)
 
 Outputs:
   data/v2_box_prior.csv            Per-player-season priors (prior_O, prior_D)
@@ -30,17 +29,13 @@ from sklearn.model_selection import cross_val_score
 from pathlib import Path
 
 # ── Config ────────────────────────────────────────────────────────────────────
-SKATERS_FILE = Path("data/skaters_by_game.csv")
+SKATERS_FILE = Path("data/skaters_by_game.parquet") if Path("data/skaters_by_game.parquet").exists() else Path("data/skaters_by_game.csv")
 BIO_FILE     = Path("data/moneypuck_player_bio.csv")
-PENALTY_FILE = Path("output/v2_penalties.csv")
-OUT_PRIOR    = Path("output/v2_box_prior.csv")
+PENALTY_FILE = Path("output/v2_penalties.parquet")
+OUT_PRIOR    = Path("output/v2_box_prior.parquet")
 OUT_CALIB    = Path("output/v2_prior_calibration.json")
 
-# Use v2 raw RAPM if available, otherwise fall back to v1
 RAPM_FILE = Path("output/v2_rapm_raw.csv")
-if not RAPM_FILE.exists():
-    RAPM_FILE = Path("output/rapm_results.csv")
-    print(f"Using v1 RAPM as training target: {RAPM_FILE}", file=sys.stderr)
 
 SITUATION   = "all"
 MIN_TOI_SEC = 6_000   # ~100 min
@@ -48,7 +43,7 @@ MAX_R2      = 0.45     # cap to target ~35% box score weight for NHL
 
 # ── Load & aggregate skaters_by_game ─────────────────────────────────────────
 print("Loading skaters_by_game.csv...", file=sys.stderr)
-sk = pd.read_csv(SKATERS_FILE, low_memory=False)
+sk = pd.read_parquet(SKATERS_FILE) if str(SKATERS_FILE).endswith(".parquet") else pd.read_csv(SKATERS_FILE, low_memory=False)
 sk = sk[sk["situation"] == SITUATION].copy()
 sk = sk[sk["position"] != "G"]
 
@@ -96,7 +91,7 @@ grp["pos"] = grp["pos_norm"].fillna(grp["position"].map(norm_pos))
 # ── Penalty data (per-season aggregation) ────────────────────────────────────
 if PENALTY_FILE.exists():
     print("Loading penalty data...", file=sys.stderr)
-    pen = pd.read_csv(PENALTY_FILE)
+    pen = pd.read_parquet(PENALTY_FILE)
     pen["player_id"] = pen["player_id"].astype(int)
 
     # Penalties taken per player per season
@@ -279,7 +274,7 @@ out_cols = [
     "prior_O", "prior_D", "prior_BPR",
 ]
 out = grp[out_cols].rename(columns={"pos": "position", "toi_min": "toi"})
-out.to_csv(OUT_PRIOR, index=False)
+out.to_parquet(OUT_PRIOR, index=False)
 
 print(f"\nWrote {len(out):,} player-seasons to {OUT_PRIOR}", file=sys.stderr)
 print("\nTop 15 by prior_BPR:", file=sys.stderr)

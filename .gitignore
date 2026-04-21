@@ -1,37 +1,105 @@
+# Environment & tooling
 .venv/
 .claude/
-.Rproj.user/
+.env.local
 __pycache__/
-claude.md
-*.pkl
 *.pyc
+*.pyo
+.DS_Store
+data/.DS_Store
+.Rproj.user/
 .gitattributes
+claude.md
 
-# Large raw data files
+# Model binaries
+*.pkl
+
+# Logs
+pipeline.log
+run_all.log
+run_all_v2.log
+
+# ── Large raw data (use R2 or re-scrape) ─────────────────────────────────────
 data/raw_pbp.csv
 data/raw_pbp_*.csv
 data/raw_data.csv
 data/raw_data_*.csv
 data/shots_*.csv
+data/shots_*.parquet
 data/skaters_by_game.csv
+data/skaters_by_game.parquet
 data/skaters_by_game2025.csv
-data/moneypuck_player_bio.csv
 
-# Keep deploy-trimmed versions
+# Keep small reference/deploy files
 !data/skaters_by_game_deploy.csv
 !data/skaters_by_game2025_deploy.csv
 !data/nhl_draft_picks.csv
 !data/trades.csv
+!data/moneypuck_player_bio.csv
 
-# Large pipeline intermediate files
-output/v2_clean_pbp.csv
+# ── Large pipeline inputs/intermediates ───────────────────────────────────────
+output/rapm_dataset.parquet
 output/rapm_dataset*.csv
+output/v2_clean_pbp.csv
+output/v2_clean_pbp.parquet
+output/v2_penalties.parquet
+output/v2_penalties.csv
+output/v2_box_prior.parquet
+output/v2_box_prior.csv
+output/v2_final_ratings.parquet
+output/v2_final_ratings_by_season.parquet
+output/v4_epm_raw_per_game.parquet
+output/v4_daily_epm.parquet
+output/v4_season_war.parquet
+output/v5_daily_ratings.parquet
+output/v6_team_game_ratings.parquet
+
+# ── Dashboard/R2 output parquets (large — served from R2, not git) ────────────
+output/v2_rapm_by_season.parquet
+output/v2_gar_by_season.parquet
+output/v2_gar_pooled.parquet
+output/v3_rolling_rapm.parquet
+output/v3_rolling_rapm_latest.parquet
+output/v4_bpm_player_seasons.parquet
+output/v5_composite_player_seasons.parquet
+output/v5_season_war.parquet
+output/v5_daily_war.parquet
+output/v6_carry_forward.parquet
+output/win_shares_by_season.parquet
+output/ifinish_by_season.parquet
+
+# ── Keep small/final outputs in git ──────────────────────────────────────────
+!output/learned_bpr_weights.json
+!output/v2_prior_calibration.json
+!output/v4_epm_model.json
+!output/v5_daily_ratings_deploy.csv
+!output/v6_team_season_ratings.csv
+!output/v2_rapm_results.csv
+!output/v2_rapm_by_season.csv
+!output/v2_gar_pooled.csv
+!output/dashboard_combined_war.csv
+!output/dashboard_skater_war.csv
+!output/dashboard_goalie_war.csv
+
+# Regenerated each run — omit from git
+output/v2_rapm_raw.csv
+output/v2_goalie_rapm.csv
+output/rapm_bootstrap_se.csv
+output/predictiveness_*.csv
+output/learned_age_curve*.csv
 output/clean_pbp.csv
 output/v3_daily_bpr.csv
 output/v4_daily_epm.csv
 output/v4_epm_raw_per_game.csv
 output/v5_daily_ratings.csv
-output/v4_daily_epm.csv
+output/ifinish_by_season.csv
+output/v3_season_war.csv
+output/v4_season_war.csv
+output/v6_age_curve.csv
+output/pk_rapm.csv
+output/pp_rapm.csv
+output/legacy/
 
-# Keep deploy-trimmed daily ratings
-!output/v5_daily_ratings_deploy.csv
+# Viz HTML output (large interactive files — served from R2 or regenerated)
+viz/output_v1/
+viz/output_v2/*.html

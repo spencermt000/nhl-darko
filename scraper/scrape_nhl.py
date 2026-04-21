@@ -706,6 +706,8 @@ def main():
                         help="Season start year (default: 2025 for 2025-26)")
     parser.add_argument("--start", type=str, default=None,
                         help="Start date (YYYY-MM-DD) to resume scraping from")
+    parser.add_argument("--append", action="store_true",
+                        help="Append to existing files, auto-detecting last scraped date")
     parser.add_argument("--skip-shots", action="store_true",
                         help="Skip downloading MoneyPuck shots file")
     parser.add_argument("--max-games", type=int, default=None,
@@ -715,8 +717,31 @@ def main():
     season = args.season
     print(f"Scraping {season}-{season+1} NHL season", file=sys.stderr)
 
+    # Detect start date from existing file when --append is set
+    start_date = args.start
+    pbp_path = os.path.join(DATA_DIR, f"raw_pbp_{season}.csv")
+    existing_pbp = None
+    existing_lineup = None
+
+    if args.append and os.path.exists(pbp_path):
+        existing_pbp = pd.read_csv(pbp_path, low_memory=False)
+        if "game_date" in existing_pbp.columns and len(existing_pbp) > 0:
+            last_date = existing_pbp["game_date"].max()
+            # Start from day after last scraped date
+            from datetime import datetime, timedelta as _td
+            next_date = (datetime.strptime(str(last_date), "%Y-%m-%d") + _td(days=1)).strftime("%Y-%m-%d")
+            if start_date is None or next_date > start_date:
+                start_date = next_date
+            print(f"Append mode: last game date was {last_date}, resuming from {start_date}", file=sys.stderr)
+        else:
+            existing_pbp = None  # file exists but empty/no date column
+
+        lineup_path = os.path.join(DATA_DIR, f"raw_data_{season}.csv")
+        if os.path.exists(lineup_path):
+            existing_lineup = pd.read_csv(lineup_path, low_memory=False)
+
     # 1. Get schedule
-    games = get_season_games(season, start_date=args.start)
+    games = get_season_games(season, start_date=start_date)
     if args.max_games:
         games = games[:args.max_games]
 
@@ -784,21 +809,33 @@ def main():
     # 4. Save outputs
     print("\nSaving outputs...", file=sys.stderr)
 
-    pbp_df = pd.DataFrame(all_pbp_rows)
+    new_pbp_df = pd.DataFrame(all_pbp_rows)
     pbp_path = os.path.join(DATA_DIR, f"raw_pbp_{season}.csv")
+    if args.append and existing_pbp is not None and len(new_pbp_df) > 0:
+        pbp_df = pd.concat([existing_pbp, new_pbp_df], ignore_index=True)
+        print(f"  Appended {len(new_pbp_df):,} new PBP rows to {len(existing_pbp):,} existing → {len(pbp_df):,} total",
+              file=sys.stderr)
+    else:
+        pbp_df = new_pbp_df
     pbp_df.to_csv(pbp_path, index=False)
     print(f"  {len(pbp_df):,} PBP rows → {pbp_path}", file=sys.stderr)
 
-    lineup_df = pd.DataFrame(all_lineup_rows)
+    new_lineup_df = pd.DataFrame(all_lineup_rows)
     lineup_path = os.path.join(DATA_DIR, f"raw_data_{season}.csv")
+    if args.append and existing_lineup is not None and len(new_lineup_df) > 0:
+        lineup_df = pd.concat([existing_lineup, new_lineup_df], ignore_index=True)
+        print(f"  Appended {len(new_lineup_df):,} new lineup rows to {len(existing_lineup):,} existing → {len(lineup_df):,} total",
+              file=sys.stderr)
+    else:
+        lineup_df = new_lineup_df
     lineup_df.to_csv(lineup_path, index=False)
     print(f"  {len(lineup_df):,} lineup rows → {lineup_path}", file=sys.stderr)
 
     # 5. Summary
     print(f"\n{'='*60}", file=sys.stderr)
     print(f"Season {season}-{season+1} scrape complete!", file=sys.stderr)
-    print(f"  PBP events: {len(pbp_df):,}", file=sys.stderr)
-    print(f"  Lineup events: {len(lineup_df):,}", file=sys.stderr)
+    print(f"  New PBP events: {len(new_pbp_df):,}", file=sys.stderr)
+    print(f"  Total PBP events: {len(pbp_df):,}", file=sys.stderr)
     print(f"  Games: {len(games) - len(failed_games)}", file=sys.stderr)
     print(f"\nOutputs:", file=sys.stderr)
     print(f"  {pbp_path}", file=sys.stderr)

@@ -371,7 +371,7 @@ for feat, c in sorted(zip(GV_D_FEATURES, coef_OOI_D), key=lambda x: abs(x[1]), r
 print("\n── Merging RAPM and special teams ──", file=sys.stderr)
 
 # Rolling RAPM — match player to their best window for each season
-rapm = pd.read_csv("output/v3_rolling_rapm.csv")
+rapm = pd.read_parquet("output/v3_rolling_rapm.parquet")
 rapm["player_id"] = rapm["player_id"].astype(int)
 
 # For each player-season, find the window that contains that season
@@ -466,7 +466,7 @@ for c in ["GV_O", "GV_D", "OOI_O", "OOI_D", "RAPM_O", "RAPM_D",
 out["toi_min"] = out["toi_min"].round(1)
 
 out = out.sort_values(["season", "player_name"]).reset_index(drop=True)
-out.to_csv("output/v4_bpm_player_seasons.csv", index=False)
+out.to_parquet("output/v4_bpm_player_seasons.parquet", index=False)
 print(f"  {len(out):,} player-seasons → output/v4_bpm_player_seasons.csv", file=sys.stderr)
 
 
