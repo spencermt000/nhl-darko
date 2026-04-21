@@ -351,7 +351,21 @@ for pi, pid in enumerate(player_ids):
 
 daily = pd.DataFrame(smoothed)
 daily.to_parquet("output/v5_daily_ratings.parquet", index=False)
-print(f"\n  {len(daily):,} rows → output/v5_daily_ratings.csv", file=sys.stderr)
+print(f"\n  {len(daily):,} rows → output/v5_daily_ratings.parquet", file=sys.stderr)
+
+# Deploy CSV: current season only, for dashboard/R2 (smaller footprint)
+current_szn = daily["season"].max()
+deploy_cols = [
+    "player_id", "player_name", "position", "game_id", "season", "game_date",
+    "game_number", "toi_5v5", "toi_pp", "toi_pk", "toi_all",
+    "EV_O", "EV_D", "PP", "PK", "PEN",
+    "EV_O_se", "EV_D_se", "PP_se", "PK_se", "PEN_se",
+    "EV_O_gar", "EV_D_gar", "PP_gar", "PK_gar", "PEN_gar",
+]
+deploy_cols = [c for c in deploy_cols if c in daily.columns]
+deploy = daily[daily["season"] == current_szn][deploy_cols]
+deploy.to_csv("output/v5_daily_ratings_deploy.csv", index=False)
+print(f"  {len(deploy):,} rows (season {current_szn}) → output/v5_daily_ratings_deploy.csv", file=sys.stderr)
 
 
 # ── 6. Season aggregation ────────────────────────────────────────────────────
