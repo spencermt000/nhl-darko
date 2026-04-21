@@ -77,10 +77,12 @@ def _load_r2_env():
 
 def _maybe_download_from_r2(status_placeholder=None):
     """
-    Download any missing dashboard files from Cloudflare R2.
-    Only runs if R2_ENDPOINT is configured and files are absent locally.
+    Download dashboard files from Cloudflare R2 when missing or stale.
+    Compares local MD5 against R2 ETag; downloads if different or absent.
     Returns the count of files downloaded.
     """
+    import hashlib
+
     _load_r2_env()
     endpoint = os.environ.get("R2_ENDPOINT")
     access_key = os.environ.get("R2_ACCESS_KEY_ID")
@@ -88,10 +90,6 @@ def _maybe_download_from_r2(status_placeholder=None):
     bucket = os.environ.get("R2_BUCKET_NAME", "nhl")
 
     if not all([endpoint, access_key, secret_key]):
-        return 0
-
-    missing = [p for p in _R2_DASHBOARD_FILES if not os.path.exists(os.path.join(BASE, p))]
-    if not missing:
         return 0
 
     try:
@@ -110,17 +108,40 @@ def _maybe_download_from_r2(status_placeholder=None):
         region_name="auto",
     )
 
+    # Fetch R2 object listing once
+    try:
+        paginator = client.get_paginator("list_objects_v2")
+        r2_etags = {}
+        for page in paginator.paginate(Bucket=bucket):
+            for obj in page.get("Contents", []):
+                r2_etags[obj["Key"]] = obj["ETag"].strip('"')
+    except ClientError:
+        return 0
+
+    def _md5(path):
+        h = hashlib.md5()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(8192), b""):
+                h.update(chunk)
+        return h.hexdigest()
+
     downloaded = 0
-    for rel_path in missing:
+    for rel_path in _R2_DASHBOARD_FILES:
+        if rel_path not in r2_etags:
+            continue  # not in R2 yet
         local_path = os.path.join(BASE, rel_path)
+        local_exists = os.path.exists(local_path)
+        if local_exists and _md5(local_path) == r2_etags[rel_path]:
+            continue  # already up to date
+
         os.makedirs(os.path.dirname(local_path), exist_ok=True)
         if status_placeholder:
-            status_placeholder.info(f"Downloading {rel_path} from R2...")
+            status_placeholder.info(f"Syncing {rel_path} from R2...")
         try:
             client.download_file(bucket, rel_path, local_path)
             downloaded += 1
         except ClientError:
-            pass  # file may not exist in R2 yet
+            pass
 
     return downloaded
 
