@@ -932,13 +932,13 @@ with _tabs[5]:
         roster = ws25[ws25["team"] == team_sel].copy()
         player_ids = set(roster["player_id"])
 
-        # Merge box score stats
-        box25 = skater_box[skater_box["season"] == LATEST_SEASON].copy()
-        roster = roster.merge(
-            box25[["player_id", "goals", "assists_1", "assists_2", "points", "shots",
-                   "hits", "blocks", "toi_all"]],
-            on="player_id", how="left"
-        )
+        # Merge box score stats from unified (covers all players including fringe callups)
+        box_cols = ["player_id", "goals", "assists_1", "assists_2", "points", "shots",
+                    "hits", "blocks"]
+        unified25 = unified[unified["season"] == LATEST_SEASON]
+        avail_box = [c for c in box_cols if c in unified25.columns]
+        roster = roster.merge(unified25[avail_box].drop_duplicates("player_id"),
+                              on="player_id", how="left")
 
         # Merge surplus
         if surplus_data is not None:
