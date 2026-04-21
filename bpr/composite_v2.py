@@ -35,12 +35,12 @@ OUT_SEASON   = "output/v2_final_ratings_by_season.parquet"
 # ── Load data ──────────────────────────────────────────────────────────────
 print("Loading v2 RAPM results...", file=sys.stderr)
 rapm_p = pd.read_csv(RAPM_POOLED)
-rapm_s = pd.read_csv(RAPM_SEASON)
+rapm_s = pd.read_parquet(RAPM_SEASON)
 rapm_p["player_id"] = rapm_p["player_id"].astype(int)
 rapm_s["player_id"] = rapm_s["player_id"].astype(int)
 
 print("Loading box score priors...", file=sys.stderr)
-prior = pd.read_csv(PRIOR_FILE)
+prior = pd.read_parquet(PRIOR_FILE)
 prior["player_id"] = prior["player_id"].astype(int)
 
 # PP/PK RAPM (from v1 — reuse since we don't have a separate v2 PP model)

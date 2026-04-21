@@ -453,7 +453,7 @@ if GAR_SEASON.exists():
 GOALIE_WAR_FILE = Path("output/v2_goalie_war.csv")
 if GOALIE_WAR_FILE.exists():
     gwar = pd.read_csv(GOALIE_WAR_FILE)
-    top15g = gwar.sort_values("GOALIE_GAR_per60", ascending=False).head(15).reset_index(drop=True)
+    top15g = gwar.sort_values("GOALIE_GAR", ascending=False).head(15).reset_index(drop=True)
 
     fig, ax = plt.subplots(figsize=(9, 5))
     ax.axis("off")
@@ -464,7 +464,7 @@ if GOALIE_WAR_FILE.exists():
             i + 1,
             row["goalie_name"],
             f"{row['goalie_rate']:+.4f}",
-            f"{row['GOALIE_GAR_per60']:+.4f}",
+            f"{row['GOALIE_GAR']:+.4f}",
             f"{row['GOALIE_WAR_per60']:+.4f}",
         ])
     tbl = ax.table(cellText=rows, colLabels=header, cellLoc="center", loc="center")

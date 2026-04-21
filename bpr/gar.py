@@ -124,7 +124,7 @@ print(f"  Penalty events: {len(penalties):,}", file=sys.stderr)
 
 # Individual finishing (iFinish) — only if learned weights include it
 if IFINISH_FILE.exists() and W_iFIN != 0:
-    ifinish = pd.read_csv(IFINISH_FILE)
+    ifinish = pd.read_parquet(IFINISH_FILE)
     ifinish["player_id"] = ifinish["player_id"].astype(int)
     # Pooled iFinish: TOI-weighted average of shrunk values (multi-year → shrinkage helps)
     ifinish_pooled = ifinish.groupby("player_id").apply(
