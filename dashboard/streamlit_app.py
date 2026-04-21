@@ -64,7 +64,16 @@ _R2_DASHBOARD_FILES = [
 
 
 def _load_r2_env():
-    """Load .env.local credentials into environment if not already set."""
+    """Load R2 credentials: Streamlit secrets first, then .env.local fallback."""
+    # Streamlit Community Cloud: read from st.secrets
+    try:
+        for key in ("R2_ENDPOINT", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET_NAME"):
+            if key in st.secrets and key not in os.environ:
+                os.environ[key] = st.secrets[key]
+    except Exception:
+        pass
+
+    # Local dev fallback: read from .env.local
     env_path = os.path.join(BASE, ".env.local")
     if os.path.exists(env_path):
         with open(env_path) as f:
