@@ -1,31 +1,31 @@
 {
   "architecture": "Separate O/D XGBoost models: box scores \u2192 RAPM (NBA EPM style)",
-  "r2_O": 0.7421,
-  "r2_D": 0.7591,
+  "r2_O": 0.7495,
+  "r2_D": 0.7571,
   "n_features_O": 56,
   "n_features_D": 31,
   "top_O_features": {
-    "O_xGPct_rel": 0.0548,
-    "O_iSOG_raw": 0.0391,
-    "O_oiXGF_rate": 0.0292,
-    "O_fenwick_rel": 0.0259,
-    "O_primary_pts_rate": 0.0229,
-    "O_points_raw": 0.0225,
-    "O_xG_per_shot": 0.0224,
-    "O_iSOG_rate": 0.0215,
-    "O_iMDShots_raw": 0.0211,
-    "O_foWon_rate": 0.0198
+    "O_oiHDxGF_rate": 0.05,
+    "O_oiXGF_rate": 0.0469,
+    "O_xGPct_rel": 0.036,
+    "O_rebounds_raw": 0.0256,
+    "O_points_raw": 0.0255,
+    "O_iSOG_raw": 0.0218,
+    "O_fenwick_rel": 0.0213,
+    "O_iSA_raw": 0.0204,
+    "O_primary_pts_raw": 0.0198,
+    "O_foWon_rate": 0.0197
   },
   "top_D_features": {
-    "D_oiSOGA_rate": 0.1032,
-    "D_oiGA_rate": 0.0884,
-    "D_isD": 0.0712,
-    "D_oiXGA_rate": 0.0486,
-    "D_blocks_rate": 0.0441,
-    "D_blocks_raw": 0.0411,
-    "D_dzEndPct": 0.0339,
-    "D_oiSAA_rate": 0.0315,
-    "D_foLost_rate": 0.0291,
-    "D_xGPct_rel": 0.0279
+    "D_oiXGA_rate": 0.099,
+    "D_oiGA_rate": 0.097,
+    "D_isD": 0.0566,
+    "D_oiHDxGA_rate": 0.0392,
+    "D_oiSOGA_rate": 0.0389,
+    "D_oiHDSA_rate": 0.0376,
+    "D_blocks_rate": 0.0373,
+    "D_dzEndPct": 0.0335,
+    "D_blocks_raw": 0.0321,
+    "D_blocks_share": 0.0319
   }
 }

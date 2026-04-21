@@ -457,15 +457,15 @@ if GOALIE_WAR_FILE.exists():
 
     fig, ax = plt.subplots(figsize=(9, 5))
     ax.axis("off")
-    header = ["Rank", "Goalie", "Rate", "GAR/60", "WAR/60"]
+    header = ["Rank", "Goalie", "SV%", "GAR", "WAR"]
     rows = []
     for i, row in top15g.iterrows():
         rows.append([
             i + 1,
             row["goalie_name"],
-            f"{row['goalie_rate']:+.4f}",
+            f"{row['total_sv_pct']:+.4f}",
             f"{row['GOALIE_GAR']:+.4f}",
-            f"{row['GOALIE_WAR_per60']:+.4f}",
+            f"{row['GOALIE_WAR']:+.4f}",
         ])
     tbl = ax.table(cellText=rows, colLabels=header, cellLoc="center", loc="center")
     tbl.auto_set_font_size(False)
